@@ -28,6 +28,14 @@ const (
 	DriverSQLite   Driver = "sqlite"
 )
 
+// RelationHint is a belongs-to relationship extracted from bob's R struct.
+// FieldName is the R struct field name (e.g. "Post", "Author"),
+// TargetModel is the Go model name (e.g. "Post", "User").
+type RelationHint struct {
+	FieldName   string // R struct field name, e.g. "Post", "Author"
+	TargetModel string // pointed-to model name, e.g. "Post", "User"
+}
+
 // Table represents a single database table.
 type Table struct {
 	Name    string // raw table name as it appears in the DB
@@ -43,6 +51,10 @@ type Table struct {
 
 	// ColumnMap provides O(1) lookup by column name.
 	ColumnMap map[string]*Column
+
+	// Meta holds parser-specific data not used by generators directly.
+	// Used during relationship resolution to carry bob R struct hints.
+	Meta []RelationHint `json:"-"`
 }
 
 // GoName returns the PascalCase singular Go type name for this table.

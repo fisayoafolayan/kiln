@@ -179,34 +179,137 @@ func (p *Parser) parseModelFile(path string) (*ir.Table, error) {
 		return nil, nil
 	}
 
+	// Parse the R struct to extract relationship hints.
+	// e.g. type commentR struct { Post *Post; User *User }
+	// tells us comments belongs-to posts (via post_id) and users (via user_id).
+	table.Meta = parseRelationHints(f, modelName)
+
 	return table, nil
 }
 
-// resolveRelationships wires up ForeignKey relationships between tables
-// by detecting FK columns (columns named <other_table>_id).
+// resolveRelationships wires up ForeignKey relationships between tables.
+//
+// Primary strategy: use bob's R struct hints (parsed from the model file).
+// Each belongs-to field in the R struct (e.g. `Author *User`) tells us:
+//   - The FK column name: snake_case(FieldName) + "_id" (e.g. "author_id")
+//   - The target table: pluralize(snake_case(TargetModel)) (e.g. "users")
+//
+// Fallback: if no R struct hints are available (e.g. hand-written models),
+// fall back to the _id column naming convention.
 func (p *Parser) resolveRelationships(schema *ir.Schema) error {
+	// Build a lookup from model name → table for R struct resolution.
+	modelToTable := make(map[string]*ir.Table, len(schema.Tables))
 	for _, t := range schema.Tables {
-		for _, c := range t.Columns {
-			if !strings.HasSuffix(c.Name, "_id") {
-				continue
-			}
-			// Infer target table name from column: user_id → users, person_id → people
-			targetName := flect.Pluralize(strings.TrimSuffix(c.Name, "_id"))
-			targetTable, ok := schema.TableMap[targetName]
-			if !ok || targetTable.PrimaryKey == nil {
-				continue
-			}
-			fk := &ir.ForeignKey{
-				SourceTable:  t,
-				SourceColumn: c,
-				TargetTable:  targetTable,
-				TargetColumn: targetTable.PrimaryKey,
-			}
-			t.ForeignKeys = append(t.ForeignKeys, fk)
-			targetTable.ReferencedBy = append(targetTable.ReferencedBy, fk)
+		// Reverse toTableName: "users" came from model "User".
+		// We singularize and PascalCase the table name.
+		model := flect.Pascalize(flect.Singularize(t.Name))
+		modelToTable[model] = t
+	}
+
+	for _, t := range schema.Tables {
+		if len(t.Meta) > 0 {
+			// Use R struct hints — accurate FK resolution.
+			p.resolveFromHints(schema, t, modelToTable)
+		} else {
+			// Fallback: _id column heuristic.
+			p.resolveFromColumns(schema, t)
 		}
 	}
 	return nil
+}
+
+// resolveFromHints uses the R struct belongs-to fields to wire up FKs.
+func (p *Parser) resolveFromHints(schema *ir.Schema, t *ir.Table, modelToTable map[string]*ir.Table) {
+	for _, hint := range t.Meta {
+		// FK column: snake_case(FieldName) + "_id"
+		// e.g. "Author" → "author_id", "Post" → "post_id"
+		fkColName := toSnakeCase(hint.FieldName) + "_id"
+		fkCol, ok := t.ColumnMap[fkColName]
+		if !ok {
+			continue
+		}
+
+		// Target table: look up by model name.
+		targetTable, ok := modelToTable[hint.TargetModel]
+		if !ok || targetTable.PrimaryKey == nil {
+			continue
+		}
+
+		fk := &ir.ForeignKey{
+			SourceTable:  t,
+			SourceColumn: fkCol,
+			TargetTable:  targetTable,
+			TargetColumn: targetTable.PrimaryKey,
+		}
+		t.ForeignKeys = append(t.ForeignKeys, fk)
+		targetTable.ReferencedBy = append(targetTable.ReferencedBy, fk)
+	}
+}
+
+// resolveFromColumns is the fallback heuristic: columns ending in _id.
+func (p *Parser) resolveFromColumns(schema *ir.Schema, t *ir.Table) {
+	for _, c := range t.Columns {
+		if !strings.HasSuffix(c.Name, "_id") {
+			continue
+		}
+		targetName := flect.Pluralize(strings.TrimSuffix(c.Name, "_id"))
+		targetTable, ok := schema.TableMap[targetName]
+		if !ok || targetTable.PrimaryKey == nil {
+			continue
+		}
+		fk := &ir.ForeignKey{
+			SourceTable:  t,
+			SourceColumn: c,
+			TargetTable:  targetTable,
+			TargetColumn: targetTable.PrimaryKey,
+		}
+		t.ForeignKeys = append(t.ForeignKeys, fk)
+		targetTable.ReferencedBy = append(targetTable.ReferencedBy, fk)
+	}
+}
+
+// parseRelationHints finds the R struct (e.g. `commentR`) in the AST
+// and extracts belongs-to relationships from pointer fields.
+//
+// Bob generates: type commentR struct { Post *Post; User *User }
+// Pointer fields (*Post) are belongs-to; slice fields (PostSlice) are has-many.
+// We only care about belongs-to — has-many is the inverse, derived later.
+func parseRelationHints(f *ast.File, modelName string) []ir.RelationHint {
+	// The R struct is named lowercase(modelName) + "R", e.g. "commentR".
+	rStructName := strings.ToLower(modelName[:1]) + modelName[1:] + "R"
+
+	var hints []ir.RelationHint
+	ast.Inspect(f, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok || ts.Name.Name != rStructName {
+			return true
+		}
+		st, ok := ts.Type.(*ast.StructType)
+		if !ok {
+			return false
+		}
+		for _, field := range st.Fields.List {
+			if len(field.Names) == 0 {
+				continue
+			}
+			// Only pointer fields are belongs-to relationships.
+			star, ok := field.Type.(*ast.StarExpr)
+			if !ok {
+				continue
+			}
+			// Extract the target model name from *ModelName.
+			ident, ok := star.X.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			hints = append(hints, ir.RelationHint{
+				FieldName:   field.Names[0].Name,
+				TargetModel: ident.Name,
+			})
+		}
+		return false
+	})
+	return hints
 }
 
 // resolveGoType converts an ast.Expr from bob's generated model into
