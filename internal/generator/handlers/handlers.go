@@ -130,6 +130,9 @@ func funcMap() template.FuncMap {
 		"isOperationEnabled": func(op string, o config.TableOverride) bool {
 			return !o.IsOperationDisabled(op)
 		},
+		"pkIsStringLike": func(t *ir.Table) bool {
+			return t.PKIsStringLike()
+		},
 	}
 }
 
@@ -147,18 +150,19 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-
+{{if not (pkIsStringLike .Table)}}	"strconv"
+{{end}}
 	"{{.ImportPath}}/types"
 )
 
 // {{.Table.GoName}}Store is the interface the handler depends on.
 type {{.Table.GoName}}Store interface {
-{{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id string) (*types.{{.Table.GoName}}, error)
+{{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id {{.Table.PKTypeName}}) (*types.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int) ([]types.{{.Table.GoName}}, int, error)
 {{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id string, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id string) error
-{{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID string, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error)
+{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
+{{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id {{.Table.PKTypeName}}) error
+{{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error)
 {{end}}}
 
 // {{.Table.GoName}}Handler handles HTTP requests for {{.Table.Name}}.
@@ -174,12 +178,21 @@ func New{{.Table.GoName}}Handler(store {{.Table.GoName}}Store) *{{.Table.GoName}
 {{if isOperationEnabled "get" .Override}}
 // Get handles GET /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Get(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	{{if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
 	}
-	row, err := h.store.Get(r.Context(), id)
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{end}}
+	row, err := h.store.Get(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "{{.Table.Name}} not found")
 		return
@@ -230,11 +243,20 @@ func (h *{{.Table.GoName}}Handler) Create(w http.ResponseWriter, r *http.Request
 {{if isOperationEnabled "update" .Override}}
 // Update handles PATCH /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	{{if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
 	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{end}}
 	var req types.Update{{.Table.GoName}}Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -243,7 +265,7 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 	if !validateRequest(w, req) {
 		return
 	}
-	row, err := h.store.Update(r.Context(), id, req)
+	row, err {{if pkIsStringLike .Table}}:{{end}}= h.store.Update(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update {{.Table.Name}}")
 		return
@@ -255,12 +277,21 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 {{if isOperationEnabled "delete" .Override}}
 // Delete handles DELETE /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	{{if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
 	}
-	if err := h.store.Delete(r.Context(), id); err != nil {
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{end}}
+	if err := h.store.Delete(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete {{.Table.Name}}")
 		return
 	}
@@ -271,11 +302,21 @@ func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request
 {{range .ForeignKeys}}
 // ListBy{{.TargetTable.GoName}} handles GET /{{.TargetTable.Endpoint}}/{id}/{{$.Table.Endpoint}}
 func (h *{{$.Table.GoName}}Handler) ListBy{{.TargetTable.GoName}}(w http.ResponseWriter, r *http.Request) {
-	parentID := r.PathValue("id")
+	{{if .TargetTable.PKIsStringLike}}parentID := r.PathValue("id")
 	if parentID == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
+	}{{else}}parentIDStr := r.PathValue("id")
+	if parentIDStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
 	}
+	parentIDVal, err := strconv.ParseInt(parentIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	parentID := {{.TargetTable.PKTypeName}}(parentIDVal){{end}}
 	page, pageSize := parsePagination(r)
 	rows, total, err := h.store.ListBy{{.TargetTable.GoName}}(r.Context(), parentID, page, pageSize)
 	if err != nil {

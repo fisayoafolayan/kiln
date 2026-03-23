@@ -77,6 +77,7 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 		}
 		// Skip tables with no primary key (e.g. composite PK join tables)
 		if t.PrimaryKey == nil {
+			fmt.Fprintf(os.Stderr, "  [parser] skipping %s: no single-column primary key (composite PKs not supported)\n", t.Name)
 			continue
 		}
 		// Skip explicitly excluded tables

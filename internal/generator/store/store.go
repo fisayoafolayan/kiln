@@ -217,7 +217,7 @@ func New{{.Table.GoName}}Store(db bob.DB) *{{.Table.GoName}}Store {
 
 {{if isOperationEnabled "get" .Override}}
 // Get retrieves a single {{.Table.GoName}} by primary key.
-func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id string) (*types.{{.Table.GoName}}, error) {
+func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName}}) (*types.{{.Table.GoName}}, error) {
 	row, err := models.{{.Table.GoNamePlural}}.Query(
 		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
@@ -250,7 +250,7 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int) (
 
 {{range .Table.ForeignKeys}}
 // ListBy{{.TargetTable.GoName}} retrieves {{$.Table.GoNamePlural}} belonging to a {{.TargetTable.GoName}}.
-func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID string, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error) {
+func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error) {
 	if page < 1 { page = 1 }
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
 	rows, err := models.{{$.Table.GoNamePlural}}.Query(
@@ -332,7 +332,7 @@ func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id string, req type
 
 {{if isOperationEnabled "delete" .Override}}
 // Delete removes a {{.Table.GoName}} record by primary key.
-func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id string) error {
+func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
 	row, err := models.{{.Table.GoNamePlural}}.Query(
 		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)

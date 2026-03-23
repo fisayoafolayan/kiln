@@ -84,6 +84,21 @@ func (t *Table) Endpoint() string {
 	return toKebabCase(t.Name)
 }
 
+// PKTypeName returns the Go type name for the primary key (e.g. "string", "int64", "uuid.UUID").
+func (t *Table) PKTypeName() string {
+	if t.PrimaryKey == nil {
+		return "string"
+	}
+	return t.PrimaryKey.GoType.Name
+}
+
+// PKIsStringLike returns true if the primary key is string or uuid.UUID,
+// meaning no conversion is needed when reading from an HTTP path parameter.
+func (t *Table) PKIsStringLike() bool {
+	name := t.PKTypeName()
+	return name == "string" || name == "uuid.UUID"
+}
+
 // Column represents a single column in a table.
 type Column struct {
 	Name         string
@@ -112,9 +127,20 @@ func (c *Column) JSONName() string {
 }
 
 // IsReadOnly returns true if this column should be excluded from
-// Create and Update request structs (PKs and DB-managed fields).
+// Create and Update request structs.
+//
+// A column is auto-readonly if it is a primary key, or if it is a
+// timestamp column with a database default (e.g. created_at DEFAULT now()).
+// For other cases, use overrides.readonly_fields in kiln.yaml.
 func (c *Column) IsReadOnly() bool {
-	return c.IsPrimaryKey || c.Name == "created_at" || c.Name == "updated_at"
+	if c.IsPrimaryKey {
+		return true
+	}
+	// Timestamp columns with DB defaults are typically DB-managed.
+	if c.HasDefault && c.GoType.Name == "time.Time" {
+		return true
+	}
+	return false
 }
 
 // GoType is a database-agnostic Go type resolved from the raw DB type.
