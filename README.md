@@ -1,6 +1,6 @@
 # kiln
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.22-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.26-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
 
@@ -21,7 +21,7 @@ All by hand. All again when your schema changes.
 
 ## Requirements
 
-- Go 1.22 or later
+- Go 1.26 or later
 - Docker (for running a local database during development)
 - A Postgres, MySQL/MariaDB, or SQLite database
 
@@ -258,9 +258,14 @@ Your Database Schema
                                     cmd/server/    (runnable server)
 ```
 
-kiln uses [bob](https://github.com/stephenafamo/bob) under the hood to read
-your database schema. You don't need to know bob — kiln sets it up and manages
-it automatically.
+kiln uses [bob](https://github.com/stephenafamo/bob) (v0.42.0+) under the hood
+to read your database schema. You don't need to know bob — kiln sets it up and
+manages it automatically.
+
+**Foreign key resolution:** kiln reads bob's generated relationship structs to
+accurately resolve FK relationships — even when column names don't match table
+names (e.g. `author_id → users`). This is how nested routes like
+`GET /users/{id}/posts` are discovered automatically.
 
 ---
 
@@ -272,19 +277,23 @@ it automatically.
 version: 1
 
 database:
-  driver: "postgres"          # postgres | mysql | sqlite
-  dsn: "postgres://..."
-  # dsn_env: DATABASE_URL
+  driver: "postgres"            # postgres | mysql | sqlite
+  dsn: "postgres://..."         # direct DSN
+  # dsn_env: DATABASE_URL       # or use an env var (takes precedence over dsn)
 
 output:
-  dir: "./generated"
-  package: generated
+  dir: "./generated"            # where generated code goes
+  package: generated            # Go package name for generated code
 
 api:
-  base_path: "/api/v1"
-  framework: stdlib           # stdlib | chi | gin
+  base_path: "/api/v1"          # prefix for all routes
+  framework: stdlib             # stdlib (chi/gin planned)
 
-generate:
+bob:
+  enabled: true                 # set to false to skip schema introspection
+  models_dir: "./models"        # where bob writes its models
+
+generate:                       # toggle individual layers for brownfield adoption
   types: true
   store: true
   handlers: true
@@ -296,19 +305,22 @@ openapi:
   output: "./docs/openapi.yaml"
   title: "My API"
   version: "1.0.0"
+  description: ""               # optional
 
 tables:
-  exclude:
+  include: []                   # if set, ONLY generate these tables
+  exclude:                      # skip these tables (mutually exclusive with include)
     - schema_migrations
 
 overrides:
   users:
-    hidden_fields:
+    endpoint: members           # override URL path: /api/v1/members instead of /api/v1/users
+    hidden_fields:              # excluded from all response types
       - password_hash
-    readonly_fields:
+    readonly_fields:            # excluded from Create/Update request types
       - created_at
       - updated_at
-    disable:
+    disable:                    # disable specific operations: create|update|delete|list|get
       - delete
 ```
 
@@ -317,12 +329,18 @@ overrides:
 ## CLI
 
 ```
-kiln init        Create kiln.yaml interactively
-kiln generate    Generate your API (runs schema introspection first)
-kiln diff        Preview what would be generated without writing files
-kiln introspect  Print the parsed schema as JSON (for debugging)
-kiln version     Print kiln version
+kiln init                  Create kiln.yaml interactively
+kiln generate              Generate your API (runs schema introspection first)
+kiln generate --table X    Regenerate only one table (useful for large schemas)
+kiln generate --no-bob     Skip schema reading, use existing models
+kiln generate --dry-run    Preview changes without writing files
+kiln diff                  Preview what would be generated without writing files
+kiln introspect            Print the parsed schema (text format)
+kiln introspect --format json   Print as JSON (for scripting)
+kiln version               Print kiln version
 ```
+
+All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
 
 ---
 
@@ -371,9 +389,10 @@ When adding a new feature:
 - [x] Postgres, MySQL/MariaDB, SQLite support
 - [x] Full CRUD handler generation
 - [x] OpenAPI 3.0 spec generation
-- [x] FK-derived nested routes
+- [x] FK-derived nested routes (using bob's R struct for accurate resolution)
 - [x] Brownfield layer adoption
 - [x] go-playground/validator integration
+- [x] Bob version compatibility checking
 - [ ] chi / gin framework support
 - [ ] Filtering & pagination config
 - [ ] Authentication middleware hooks
