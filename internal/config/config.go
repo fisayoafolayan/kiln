@@ -63,9 +63,18 @@ type APIConfig struct {
 }
 
 type BobConfig struct {
-	Enabled    bool   `yaml:"enabled"`    // default: true
+	Enabled    *bool  `yaml:"enabled"`    // default: true
 	ModelsDir  string `yaml:"models_dir"` // default: ./generated/models
 	MinVersion string `yaml:"min_version"`
+}
+
+// IsEnabled returns whether bob schema introspection is enabled.
+// Defaults to true if not explicitly set.
+func (b BobConfig) IsEnabled() bool {
+	if b.Enabled == nil {
+		return true
+	}
+	return *b.Enabled
 }
 
 type TablesConfig struct {
@@ -209,13 +218,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Bob.ModelsDir == "" {
 		c.Bob.ModelsDir = "./generated/models"
-	}
-	// Bob is enabled by default. Only disable if explicitly set to false.
-	// We use pointer-less bool here so zero value = enabled.
-	// The yaml `enabled: false` will correctly set this to false.
-	if !c.Bob.Enabled && c.Bob.ModelsDir == "./generated/models" {
-		// If not explicitly disabled, enable bob.
-		c.Bob.Enabled = true
 	}
 	if c.Auth.Header == "" {
 		c.Auth.Header = "Authorization"

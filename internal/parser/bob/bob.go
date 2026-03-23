@@ -369,8 +369,7 @@ func selectorToGoType(pkg, name string) ir.GoType {
 	case "time.Time":
 		return ir.GoTypeTime
 	case "uuid.UUID":
-		// bob v0.42 uses github.com/gofrs/uuid/v5
-		return ir.GoType{Name: "uuid.UUID", Package: "github.com/gofrs/uuid/v5"}
+		return ir.GoTypeUUID
 	case "pgtypes.JSONB", "pgtypes.JSON":
 		return ir.GoTypeJSON
 	default:

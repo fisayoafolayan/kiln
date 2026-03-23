@@ -100,7 +100,6 @@ func testConfig(t *testing.T, outDir string) *config.Config {
 			Framework: "stdlib",
 		},
 		Bob: config.BobConfig{
-			Enabled:   true,
 			ModelsDir: filepath.Join(outDir, "models"),
 		},
 		OpenAPI: config.OpenAPIConfig{

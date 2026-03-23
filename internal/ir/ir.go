@@ -134,7 +134,7 @@ var (
 	GoTypeFloat64   = GoType{Name: "float64"}
 	GoTypeBool      = GoType{Name: "bool"}
 	GoTypeTime      = GoType{Name: "time.Time", Package: "time"}
-	GoTypeUUID      = GoType{Name: "uuid.UUID", Package: "github.com/google/uuid"}
+	GoTypeUUID      = GoType{Name: "uuid.UUID", Package: "github.com/gofrs/uuid/v5"}
 	GoTypeByteSlice = GoType{Name: "[]byte"}
 	GoTypeJSON      = GoType{Name: "json.RawMessage", Package: "encoding/json"}
 )

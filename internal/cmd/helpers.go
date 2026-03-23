@@ -7,7 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/fisayoafolayan/kiln/internal/ir"
+	"github.com/fisayoafolayan/kiln/internal/parser/bob"
 )
 
 // prompt prints a label with an optional default and reads a line from stdin.
@@ -51,4 +53,28 @@ func toIRDriver(driver string) ir.Driver {
 	default:
 		return ir.DriverPostgres
 	}
+}
+
+// parseSchema loads the config and parses the bob models into an ir.Schema.
+func parseSchema() (*config.Config, *ir.Schema, error) {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	schema, err := parseSchemaWithConfig(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, schema, nil
+}
+
+// parseSchemaWithConfig parses the bob models using an already-loaded config.
+func parseSchemaWithConfig(cfg *config.Config) (*ir.Schema, error) {
+	p := bob.New(cfg.Bob.ModelsDir, toIRDriver(cfg.Database.Driver))
+	p.Exclude = cfg.Tables.Exclude
+	schema, err := p.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("parsing schema: %w", err)
+	}
+	return schema, nil
 }

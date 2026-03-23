@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fisayoafolayan/kiln/internal/config"
-	"github.com/fisayoafolayan/kiln/internal/parser/bob"
 	"github.com/spf13/cobra"
 )
 
@@ -17,15 +15,9 @@ func introspectCmd() *cobra.Command {
 		Use:   "introspect",
 		Short: "Print the parsed schema IR (useful for debugging)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(cfgFile)
+			_, schema, err := parseSchema()
 			if err != nil {
 				return err
-			}
-			p := bob.New(cfg.Bob.ModelsDir, toIRDriver(cfg.Database.Driver))
-			p.Exclude = cfg.Tables.Exclude
-			schema, err := p.Parse()
-			if err != nil {
-				return fmt.Errorf("parsing schema: %w", err)
 			}
 
 			switch format {

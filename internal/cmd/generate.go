@@ -7,7 +7,6 @@ import (
 
 	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/fisayoafolayan/kiln/internal/generator"
-	"github.com/fisayoafolayan/kiln/internal/parser/bob"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +31,7 @@ handlers, router, and OpenAPI spec.`,
 			}
 
 			// Step 1 — ensure bob is available, offer to install if not
-			if cfg.Bob.Enabled && !noBob {
+			if cfg.Bob.IsEnabled() && !noBob {
 				if err := ensureBob(cfg.Database.Driver); err != nil {
 					return err
 				}
@@ -52,11 +51,9 @@ handlers, router, and OpenAPI spec.`,
 
 			// Step 2 — parse bob's generated models into kiln IR
 			fmt.Println("  Parsing schema...")
-			p := bob.New(cfg.Bob.ModelsDir, toIRDriver(cfg.Database.Driver))
-			p.Exclude = cfg.Tables.Exclude
-			schema, err := p.Parse()
+			schema, err := parseSchemaWithConfig(cfg)
 			if err != nil {
-				return fmt.Errorf("parsing schema: %w", err)
+				return err
 			}
 			fmt.Printf("  ✓ Found %d tables\n", len(schema.Tables))
 

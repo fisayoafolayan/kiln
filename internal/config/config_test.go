@@ -48,8 +48,8 @@ database:
 	if cfg.API.Framework != "stdlib" {
 		t.Errorf("API.Framework = %q, want stdlib", cfg.API.Framework)
 	}
-	if !cfg.Bob.Enabled {
-		t.Error("Bob.Enabled = false, want true")
+	if !cfg.Bob.IsEnabled() {
+		t.Error("Bob.IsEnabled() = false, want true")
 	}
 }
 
