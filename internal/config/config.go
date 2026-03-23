@@ -10,8 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigFile = "kiln.yaml"
-
 // Config is the top-level structure of kiln.yaml.
 type Config struct {
 	Version  int            `yaml:"version"`
