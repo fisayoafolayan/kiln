@@ -445,6 +445,12 @@ components:
 {{end}}
 
 {{end}}
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
 
   responses:
     BadRequest:
@@ -471,12 +477,4 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-
-  schemas:
-    Error:
-      type: object
-      properties:
-        error:
-          type: string
-      required: [error]
 `
