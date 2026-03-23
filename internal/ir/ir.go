@@ -6,7 +6,6 @@ package ir
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -40,7 +39,6 @@ type RelationHint struct {
 type Table struct {
 	Name    string // raw table name as it appears in the DB
 	Columns []*Column
-	Indexes []*Index
 
 	// Derived fields — populated by the parser after all tables are loaded.
 	PrimaryKey  *Column // nil if composite PK (unsupported in v1)
@@ -171,20 +169,6 @@ type ForeignKey struct {
 	OnUpdate string
 }
 
-// GoName returns a descriptive name for this FK relationship.
-// Used in generated code comments and nested route registration.
-// e.g. "PostsByUserID"
-func (fk *ForeignKey) GoName() string {
-	return toPascalCase(fk.SourceTable.Name) + "By" + toPascalCase(fk.SourceColumn.Name)
-}
-
-// Index represents a database index.
-type Index struct {
-	Name    string
-	Columns []*Column
-	Unique  bool
-}
-
 // ValidationTag returns the `validate` struct tag value for a column.
 // Used by the types generator to produce validate annotations.
 func (c *Column) ValidationTag() string {
@@ -216,21 +200,4 @@ func (s *Schema) FilterTable(name string) (*Schema, error) {
 		Tables:   []*Table{t},
 		TableMap: map[string]*Table{name: t},
 	}, nil
-}
-
-// Imports returns the set of import paths required for this schema
-// across all tables and columns. Used by generators to build import blocks.
-func (s *Schema) Imports() []string {
-	seen := map[string]bool{}
-	var imports []string
-	for _, t := range s.Tables {
-		for _, c := range t.Columns {
-			if c.GoType.Package != "" && !seen[c.GoType.Package] {
-				seen[c.GoType.Package] = true
-				imports = append(imports, c.GoType.Package)
-			}
-		}
-	}
-	sort.Strings(imports)
-	return imports
 }

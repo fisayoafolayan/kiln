@@ -63,9 +63,8 @@ type APIConfig struct {
 }
 
 type BobConfig struct {
-	Enabled    *bool  `yaml:"enabled"`    // default: true
-	ModelsDir  string `yaml:"models_dir"` // default: ./generated/models
-	MinVersion string `yaml:"min_version"`
+	Enabled   *bool  `yaml:"enabled"`    // default: true
+	ModelsDir string `yaml:"models_dir"` // default: ./generated/models
 }
 
 // IsEnabled returns whether bob schema introspection is enabled.
@@ -140,7 +139,6 @@ type TableOverride struct {
 	ReadonlyFields []string `yaml:"readonly_fields"` // excluded from Create/Update
 	HiddenFields   []string `yaml:"hidden_fields"`   // excluded from all responses
 	Disable        []string `yaml:"disable"`         // operations to disable: create|update|delete|list|get
-	Filters        []string `yaml:"filters"`         // fields allowed as query filters
 	readonlySet    map[string]bool
 	hiddenSet      map[string]bool
 	disableSet     map[string]bool
