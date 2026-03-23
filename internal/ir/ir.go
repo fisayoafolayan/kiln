@@ -1,7 +1,7 @@
 // Package ir defines the Internal Representation of a database schema.
 // It is the single source of truth that all generators consume.
 // Parsers (bob, postgres, mysql, sqlite) produce IR. Generators consume IR.
-// IR is database-agnostic — no dialect-specific types leak through.
+// IR is database-agnostic - no dialect-specific types leak through.
 package ir
 
 import (
@@ -40,7 +40,7 @@ type Table struct {
 	Name    string // raw table name as it appears in the DB
 	Columns []*Column
 
-	// Derived fields — populated by the parser after all tables are loaded.
+	// Derived fields - populated by the parser after all tables are loaded.
 	PrimaryKey  *Column // nil if composite PK (unsupported in v1)
 	ForeignKeys []*ForeignKey
 	// ReferencedBy holds FKs from other tables pointing to this table.
@@ -135,7 +135,7 @@ func (g GoType) String() string {
 	return g.Name
 }
 
-// Common GoTypes — use these constants in the parser rather than
+// Common GoTypes - use these constants in the parser rather than
 // constructing GoType literals to keep mappings consistent.
 var (
 	GoTypeString    = GoType{Name: "string"}

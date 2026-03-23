@@ -1,4 +1,4 @@
--- Blog schema — MySQL 8
+-- Blog schema - MySQL 8
 -- Uses: CHAR(36) for UUIDs, DATETIME, VARCHAR, UUID() function
 -- MySQL has no native UUID type — stored as CHAR(36)
 

@@ -25,14 +25,14 @@ func initCmd() *cobra.Command {
 
 			fmt.Println(`
 ┌─────────────────────────────────────────┐
-│  kiln — schema-driven Go API generator  │
+│  kiln - schema-driven Go API generator  │
 └─────────────────────────────────────────┘
 
 kiln reads your database schema and generates a complete,
-idiomatic Go API — types, store, handlers, router, and OpenAPI spec.
+idiomatic Go API - types, store, handlers, router, and OpenAPI spec.
 
 Under the hood, kiln uses bob (github.com/stephenafamo/bob) to
-introspect your database. You don't need to know how bob works —
+introspect your database. You don't need to know how bob works -
 kiln handles it for you.
 
 Let's get started.`)
@@ -123,7 +123,7 @@ Setup complete. Run:
 }
 
 // buildBobConfig generates a bobgen.yaml config for the given driver and DSN.
-// outputDir should be the path where bob writes its models — must match
+// outputDir should be the path where bob writes its models - must match
 // the models_dir in kiln.yaml.
 func buildBobConfig(driver, dsn, outputDir string) string {
 	// Strip the "bobgen-" prefix to get the bob config section name.

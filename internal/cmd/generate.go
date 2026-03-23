@@ -30,7 +30,7 @@ handlers, router, and OpenAPI spec.`,
 				return err
 			}
 
-			// Step 1 — ensure bob is available, offer to install if not
+			// Step 1 - ensure bob is available, offer to install if not
 			if cfg.Bob.IsEnabled() && !noBob {
 				if err := ensureBob(cfg.Database.Driver); err != nil {
 					return err
@@ -49,7 +49,7 @@ handlers, router, and OpenAPI spec.`,
 				fmt.Println("  ✓ Schema read complete")
 			}
 
-			// Step 2 — parse bob's generated models into kiln IR
+			// Step 2 - parse bob's generated models into kiln IR
 			fmt.Println("  Parsing schema...")
 			schema, err := parseSchemaWithConfig(cfg)
 			if err != nil {

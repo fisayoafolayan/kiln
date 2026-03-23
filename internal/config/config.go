@@ -81,7 +81,7 @@ type TablesConfig struct {
 }
 
 // GenerateConfig controls which layers are generated.
-// Defaults to all true — opt individual layers out for brownfield adoption.
+// Defaults to all true - opt individual layers out for brownfield adoption.
 type GenerateConfig struct {
 	Types    *bool `yaml:"types"`
 	Store    *bool `yaml:"store"`
@@ -164,7 +164,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf(
-				"config file not found at %q — run `kiln init` to create one",
+				"config file not found at %q - run `kiln init` to create one",
 				path,
 			)
 		}

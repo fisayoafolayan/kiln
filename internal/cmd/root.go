@@ -13,7 +13,7 @@ func Root() *cobra.Command {
 		Use:   "kiln",
 		Short: "Generate a production-ready Go API from your database schema",
 		Long: `kiln reads your database schema via bob and generates a complete,
-idiomatic Go API — types, store, handlers, router, and OpenAPI spec.
+idiomatic Go API - types, store, handlers, router, and OpenAPI spec.
 
 Supports Postgres, MySQL/MariaDB, and SQLite.`,
 		SilenceUsage:  true,

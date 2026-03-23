@@ -1,4 +1,4 @@
-# kiln Makefile — FOR KILN CONTRIBUTORS ONLY
+# kiln Makefile - FOR KILN CONTRIBUTORS ONLY
 # ─────────────────────────────────────────────────────────────────────────────
 # This Makefile is for developing kiln itself.
 # If you are a kiln user, you don't need this.
@@ -30,7 +30,7 @@ MY_PORT      := 3306
 MY_DSN       := $(MY_USER):$(MY_PASS)@tcp(localhost:$(MY_PORT))/$(MY_DB)?parseTime=true
 MY_CONTAINER := kiln-test-mysql
 
-# SQLite (no container needed — just a file)
+# SQLite (no container needed - just a file)
 SQLITE_FILE  := $(PWD)/testdata/blog.db
 SQLITE_DSN   := $(SQLITE_FILE)
 
@@ -237,7 +237,7 @@ e2e/all: e2e/postgres e2e/mysql e2e/sqlite ## Run e2e tests against all database
 	@echo "  Output:"
 	@find testdata/e2e -type f | sort
 
-# Internal target — not called directly
+# Internal target - not called directly
 # Accepts: DRIVER, DSN, BOB_GEN, OUT
 .PHONY: _e2e
 _e2e:

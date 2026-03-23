@@ -16,7 +16,7 @@ import (
 )
 
 // testSchema returns a minimal hardcoded ir.Schema that mimics
-// the blog schema — no database connection required.
+// the blog schema - no database connection required.
 func testSchema() *ir.Schema {
 	usersTable := &ir.Table{
 		Name:      "users",

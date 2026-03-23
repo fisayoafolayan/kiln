@@ -20,7 +20,7 @@ func writeConfig(t *testing.T, content string) string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Load — valid configs
+// Load - valid configs
 // ─────────────────────────────────────────────────────────────────────────────
 
 func TestLoad_MinimalValid(t *testing.T) {
