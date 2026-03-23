@@ -219,7 +219,7 @@ func (p *Parser) resolveRelationships(schema *ir.Schema) error {
 	for _, t := range schema.Tables {
 		if len(t.Meta) > 0 {
 			// Use R struct hints — accurate FK resolution.
-			p.resolveFromHints(schema, t, modelToTable)
+			p.resolveFromHints(t, modelToTable)
 		} else {
 			// Fallback: _id column heuristic.
 			p.resolveFromColumns(schema, t)
@@ -229,7 +229,7 @@ func (p *Parser) resolveRelationships(schema *ir.Schema) error {
 }
 
 // resolveFromHints uses the R struct belongs-to fields to wire up FKs.
-func (p *Parser) resolveFromHints(schema *ir.Schema, t *ir.Table, modelToTable map[string]*ir.Table) {
+func (p *Parser) resolveFromHints(t *ir.Table, modelToTable map[string]*ir.Table) {
 	for _, hint := range t.Meta {
 		// FK column: snake_case(FieldName) + "_id"
 		// e.g. "Author" → "author_id", "Post" → "post_id"

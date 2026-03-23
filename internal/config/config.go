@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -187,11 +186,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-// LoadFromDir looks for kiln.yaml in the given directory.
-func LoadFromDir(dir string) (*Config, error) {
-	return Load(filepath.Join(dir, DefaultConfigFile))
 }
 
 // applyDefaults fills in zero values with sensible defaults.

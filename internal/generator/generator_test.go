@@ -171,7 +171,7 @@ func TestTypesFileContainsExpectedTypes(t *testing.T) {
 	checks := []struct {
 		desc    string
 		present bool
-		token   string
+		substr  string
 	}{
 		{"User response struct", true, "type User struct"},
 		{"CreateUserRequest struct", true, "type CreateUserRequest struct"},
@@ -183,12 +183,12 @@ func TestTypesFileContainsExpectedTypes(t *testing.T) {
 	}
 
 	for _, c := range checks {
-		found := strings.Contains(src, c.token)
+		found := strings.Contains(src, c.substr)
 		if c.present && !found {
-			t.Errorf("%s: expected %q in types/users.go but not found", c.desc, c.token)
+			t.Errorf("%s: expected %q in types/users.go but not found", c.desc, c.substr)
 		}
 		if !c.present && found {
-			t.Errorf("%s: expected %q to be absent from types/users.go but was found", c.desc, c.token)
+			t.Errorf("%s: expected %q to be absent from types/users.go but was found", c.desc, c.substr)
 		}
 	}
 }
@@ -209,8 +209,8 @@ func TestRouterContainsNestedRoute(t *testing.T) {
 	src := string(content)
 
 	checks := []struct {
-		desc  string
-		token string
+		desc   string
+		substr string
 	}{
 		{"users list route", "GET /api/v1/users"},
 		{"users create route", "POST /api/v1/users"},
@@ -221,8 +221,8 @@ func TestRouterContainsNestedRoute(t *testing.T) {
 	}
 
 	for _, c := range checks {
-		if !strings.Contains(src, c.token) {
-			t.Errorf("%s: expected %q in router.go but not found", c.desc, c.token)
+		if !strings.Contains(src, c.substr) {
+			t.Errorf("%s: expected %q in router.go but not found", c.desc, c.substr)
 		}
 	}
 }
@@ -293,9 +293,9 @@ func TestOpenAPIContainsAllTables(t *testing.T) {
 		"UpdateUserRequest:",
 	}
 
-	for _, token := range checks {
-		if !strings.Contains(src, token) {
-			t.Errorf("expected %q in openapi.yaml but not found", token)
+	for _, check := range checks {
+		if !strings.Contains(src, check) {
+			t.Errorf("expected %q in openapi.yaml but not found", check)
 		}
 	}
 }
