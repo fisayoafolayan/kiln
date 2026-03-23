@@ -1,0 +1,8 @@
+kiln
+kilnbin
+testdata/e2e/
+testdata/blog.db
+coverage.out
+coverage.html
+bobgen.yaml
+.idea
