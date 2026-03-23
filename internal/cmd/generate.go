@@ -84,29 +84,27 @@ handlers, router, and OpenAPI spec.`,
 	return cmd
 }
 
-// bobGenBinary returns the correct bob generator binary name for the given driver.
-func bobGenBinary(driver string) string {
-	switch driver {
-	case "mysql":
-		return "bobgen-mysql"
-	case "sqlite":
-		return "bobgen-sqlite"
-	default:
-		return "bobgen-psql"
-	}
+type bobGen struct {
+	binary string
+	module string
 }
 
-// bobGenModule returns the go install path for the given driver's bob generator.
-func bobGenModule(driver string) string {
-	switch driver {
-	case "mysql":
-		return "github.com/stephenafamo/bob/gen/bobgen-mysql@latest"
-	case "sqlite":
-		return "github.com/stephenafamo/bob/gen/bobgen-sqlite@latest"
-	default:
-		return "github.com/stephenafamo/bob/gen/bobgen-psql@latest"
-	}
+var bobGens = map[string]bobGen{
+	"mysql":  {binary: "bobgen-mysql", module: "github.com/stephenafamo/bob/gen/bobgen-mysql@latest"},
+	"sqlite": {binary: "bobgen-sqlite", module: "github.com/stephenafamo/bob/gen/bobgen-sqlite@latest"},
 }
+
+var defaultBobGen = bobGen{binary: "bobgen-psql", module: "github.com/stephenafamo/bob/gen/bobgen-psql@latest"}
+
+func bobGenFor(driver string) bobGen {
+	if bg, ok := bobGens[driver]; ok {
+		return bg
+	}
+	return defaultBobGen
+}
+
+func bobGenBinary(driver string) string { return bobGenFor(driver).binary }
+func bobGenModule(driver string) string { return bobGenFor(driver).module }
 
 func ensureBob(driver string) error {
 	bin := bobGenBinary(driver)

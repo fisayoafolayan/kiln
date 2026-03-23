@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"bytes"
 	"fmt"
 	"go/format"
 	"os"
@@ -83,17 +82,8 @@ func (g *Generator) Diff() []string {
 func (g *Generator) writeTable(t *ir.Table, outDir string) (string, error) {
 	data := g.templateData(t)
 	path := filepath.Join(outDir, t.Name+".go")
-
-	var buf bytes.Buffer
-	if err := g.tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing template: %w", err)
-	}
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		formatted = buf.Bytes()
-	}
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return "", fmt.Errorf("writing %q: %w", path, err)
+	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+		return "", err
 	}
 	return path, nil
 }

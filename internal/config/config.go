@@ -69,8 +69,10 @@ type BobConfig struct {
 }
 
 type TablesConfig struct {
-	Include []string `yaml:"include"` // if set, only generate these tables
-	Exclude []string `yaml:"exclude"` // always skip these tables
+	Include    []string `yaml:"include"` // if set, only generate these tables
+	Exclude    []string `yaml:"exclude"` // always skip these tables
+	includeSet map[string]bool
+	excludeSet map[string]bool
 }
 
 // GenerateConfig controls which layers are generated.
@@ -130,38 +132,26 @@ type TableOverride struct {
 	HiddenFields   []string `yaml:"hidden_fields"`   // excluded from all responses
 	Disable        []string `yaml:"disable"`         // operations to disable: create|update|delete|list|get
 	Filters        []string `yaml:"filters"`         // fields allowed as query filters
+	readonlySet    map[string]bool
+	hiddenSet      map[string]bool
+	disableSet     map[string]bool
 }
 
 // IsOperationDisabled returns true if the given operation is disabled
 // for this table. op should be one of: create, update, delete, list, get.
 func (o TableOverride) IsOperationDisabled(op string) bool {
-	for _, d := range o.Disable {
-		if strings.EqualFold(d, op) {
-			return true
-		}
-	}
-	return false
+	return o.disableSet[strings.ToLower(op)]
 }
 
 // IsFieldHidden returns true if the field should be excluded from responses.
 func (o TableOverride) IsFieldHidden(field string) bool {
-	for _, f := range o.HiddenFields {
-		if f == field {
-			return true
-		}
-	}
-	return false
+	return o.hiddenSet[field]
 }
 
 // IsFieldReadonly returns true if the field should be excluded from
 // Create and Update request structs.
 func (o TableOverride) IsFieldReadonly(field string) bool {
-	for _, f := range o.ReadonlyFields {
-		if f == field {
-			return true
-		}
-	}
-	return false
+	return o.readonlySet[field]
 }
 
 // Load reads and validates a kiln.yaml file at the given path.
@@ -183,6 +173,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.applyDefaults()
+	cfg.buildLookups()
 
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -238,6 +229,30 @@ func (c *Config) applyDefaults() {
 	if c.OpenAPI.Version == "" {
 		c.OpenAPI.Version = "1.0.0"
 	}
+}
+
+// buildLookups converts lists to maps for O(1) lookups.
+func (c *Config) buildLookups() {
+	c.Tables.includeSet = toSet(c.Tables.Include)
+	c.Tables.excludeSet = toSet(c.Tables.Exclude)
+
+	for name, o := range c.Overrides {
+		o.hiddenSet = toSet(o.HiddenFields)
+		o.readonlySet = toSet(o.ReadonlyFields)
+		o.disableSet = make(map[string]bool, len(o.Disable))
+		for _, d := range o.Disable {
+			o.disableSet[strings.ToLower(d)] = true
+		}
+		c.Overrides[name] = o
+	}
+}
+
+func toSet(ss []string) map[string]bool {
+	m := make(map[string]bool, len(ss))
+	for _, s := range ss {
+		m[s] = true
+	}
+	return m
 }
 
 // validate checks for required fields and invalid combinations.
@@ -302,20 +317,10 @@ func (c *Config) validate() error {
 // ShouldGenerateTable returns true if the given table name should be
 // processed, taking into account tables.include and tables.exclude.
 func (c *Config) ShouldGenerateTable(name string) bool {
-	if len(c.Tables.Include) > 0 {
-		for _, t := range c.Tables.Include {
-			if t == name {
-				return true
-			}
-		}
-		return false
+	if len(c.Tables.includeSet) > 0 {
+		return c.Tables.includeSet[name]
 	}
-	for _, t := range c.Tables.Exclude {
-		if t == name {
-			return false
-		}
-	}
-	return true
+	return !c.Tables.excludeSet[name]
 }
 
 // OverrideFor returns the TableOverride for the given table name.

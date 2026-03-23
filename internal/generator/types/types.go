@@ -2,9 +2,7 @@
 package types
 
 import (
-	"bytes"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -76,21 +74,9 @@ func (g *Generator) writeTable(t *ir.Table, outDir string) (string, error) {
 		Imports:  resolveImports(t, override),
 	}
 
-	var buf bytes.Buffer
-	if err := g.tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing template: %w", err)
-	}
-
-	// Run gofmt on the output — generated code must be properly formatted.
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		// If formatting fails, write the raw output so the error is debuggable.
-		formatted = buf.Bytes()
-	}
-
 	path := filepath.Join(outDir, t.Name+".go")
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return "", fmt.Errorf("writing %q: %w", path, err)
+	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+		return "", err
 	}
 	return path, nil
 }

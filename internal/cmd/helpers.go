@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -16,7 +17,10 @@ func prompt(r *bufio.Reader, label, defaultVal string) string {
 	} else {
 		fmt.Printf("%s: ", label)
 	}
-	line, _ := r.ReadString('\n')
+	line, err := r.ReadString('\n')
+	if err != nil && err != io.EOF {
+		fmt.Fprintf(os.Stderr, "  WARNING: error reading input: %v\n", err)
+	}
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return defaultVal
@@ -28,7 +32,10 @@ func prompt(r *bufio.Reader, label, defaultVal string) string {
 func confirm(label string) bool {
 	r := bufio.NewReader(os.Stdin)
 	fmt.Printf("%s [y/N]: ", label)
-	line, _ := r.ReadString('\n')
+	line, err := r.ReadString('\n')
+	if err != nil && err != io.EOF {
+		fmt.Fprintf(os.Stderr, "  WARNING: error reading input: %v\n", err)
+	}
 	return strings.ToLower(strings.TrimSpace(line)) == "y"
 }
 

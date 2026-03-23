@@ -42,11 +42,19 @@ func NewWithModulePath(cfg *config.Config, schema *ir.Schema, modulePath string)
 	}
 }
 
+// runnable is the interface shared by all sub-generators.
+type runnable interface {
+	Run() ([]string, error)
+	Diff() []string
+}
+
+// newFunc is a constructor for a sub-generator.
+type newFunc func(genopt.Options) (runnable, error)
+
 // Run executes all enabled generators and writes output files.
 func (g *Generator) Run(w io.Writer) error {
-	// Types
-	if g.opts.Config.Generate.IsEnabled("types") {
-		gen, err := types.New(g.opts)
+	for _, s := range g.steps() {
+		gen, err := s.newGen(g.opts)
 		if err != nil {
 			return err
 		}
@@ -55,152 +63,61 @@ func (g *Generator) Run(w io.Writer) error {
 			return err
 		}
 		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
+			if _, err := fmt.Fprintf(w, "  ✓ %s\n", f); err != nil {
+				return err
+			}
 		}
 	}
-
-	// Store
-	if g.opts.Config.Generate.IsEnabled("store") {
-		gen, err := store.New(g.opts)
-		if err != nil {
-			return err
-		}
-		written, err := gen.Run()
-		if err != nil {
-			return err
-		}
-		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
-		}
-	}
-
-	// Handlers
-	if g.opts.Config.Generate.IsEnabled("handlers") {
-		gen, err := handlers.New(g.opts)
-		if err != nil {
-			return err
-		}
-		written, err := gen.Run()
-		if err != nil {
-			return err
-		}
-		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
-		}
-	}
-
-	// Router
-	if g.opts.Config.Generate.IsEnabled("router") {
-		gen, err := router.New(g.opts)
-		if err != nil {
-			return err
-		}
-		written, err := gen.Run()
-		if err != nil {
-			return err
-		}
-		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
-		}
-	}
-
-	// OpenAPI
-	if g.opts.Config.Generate.IsEnabled("openapi") && g.opts.Config.OpenAPI.Enabled {
-		gen, err := openapi.New(g.opts)
-		if err != nil {
-			return err
-		}
-		written, err := gen.Run()
-		if err != nil {
-			return err
-		}
-		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
-		}
-	}
-
-	// main.go — write-once wiring file
-	{
-		gen, err := mainfile.New(g.opts)
-		if err != nil {
-			return err
-		}
-		written, err := gen.Run()
-		if err != nil {
-			return err
-		}
-		for _, f := range written {
-			fmt.Fprintf(w, "  ✓ %s\n", f)
-		}
-	}
-
 	return nil
 }
 
 // Diff prints what would be generated without writing any files.
 func (g *Generator) Diff(w io.Writer) error {
-	if g.opts.Config.Generate.IsEnabled("types") {
-		gen, err := types.New(g.opts)
+	for _, s := range g.steps() {
+		gen, err := s.newGen(g.opts)
 		if err != nil {
 			return err
 		}
 		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
+			if _, err := fmt.Fprintf(w, "  + %s\n", f); err != nil {
+				return err
+			}
 		}
 	}
-
-	if g.opts.Config.Generate.IsEnabled("store") {
-		gen, err := store.New(g.opts)
-		if err != nil {
-			return err
-		}
-		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
-		}
-	}
-
-	if g.opts.Config.Generate.IsEnabled("handlers") {
-		gen, err := handlers.New(g.opts)
-		if err != nil {
-			return err
-		}
-		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
-		}
-	}
-
-	if g.opts.Config.Generate.IsEnabled("router") {
-		gen, err := router.New(g.opts)
-		if err != nil {
-			return err
-		}
-		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
-		}
-	}
-
-	if g.opts.Config.Generate.IsEnabled("openapi") && g.opts.Config.OpenAPI.Enabled {
-		gen, err := openapi.New(g.opts)
-		if err != nil {
-			return err
-		}
-		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
-		}
-	}
-
-	// main.go diff
-	{
-		gen, err := mainfile.New(g.opts)
-		if err != nil {
-			return err
-		}
-		for _, f := range gen.Diff() {
-			fmt.Fprintf(w, "  + %s\n", f)
-		}
-	}
-
 	return nil
+}
+
+// step pairs an enablement check with a generator constructor.
+type step struct {
+	enabled bool
+	newGen  newFunc
+}
+
+// steps returns the ordered list of generators to run, filtered by config.
+func (g *Generator) steps() []step {
+	cfg := g.opts.Config
+	all := []step{
+		{cfg.Generate.IsEnabled("types"), asRunnable(types.New)},
+		{cfg.Generate.IsEnabled("store"), asRunnable(store.New)},
+		{cfg.Generate.IsEnabled("handlers"), asRunnable(handlers.New)},
+		{cfg.Generate.IsEnabled("router"), asRunnable(router.New)},
+		{cfg.Generate.IsEnabled("openapi") && cfg.OpenAPI.Enabled, asRunnable(openapi.New)},
+		{true, asRunnable(mainfile.New)}, // always run, write-once
+	}
+	var enabled []step
+	for _, s := range all {
+		if s.enabled {
+			enabled = append(enabled, s)
+		}
+	}
+	return enabled
+}
+
+// asRunnable wraps a typed sub-generator constructor into a newFunc.
+func asRunnable[T runnable](fn func(genopt.Options) (T, error)) newFunc {
+	return func(opts genopt.Options) (runnable, error) {
+		return fn(opts)
+	}
 }
 
 // resolveModulePath reads the module path from go.mod in the current

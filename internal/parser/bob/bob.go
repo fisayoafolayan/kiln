@@ -17,9 +17,10 @@ import (
 
 // Parser reads bob's generated models directory and produces an ir.Schema.
 type Parser struct {
-	ModelsDir string
-	Driver    ir.Driver
-	Exclude   []string // table names to skip
+	ModelsDir  string
+	Driver     ir.Driver
+	Exclude    []string // table names to skip
+	excludeSet map[string]bool
 }
 
 // New returns a Parser configured for the given models directory and driver.
@@ -41,6 +42,12 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 		)
 	}
 
+	// Build exclude set for O(1) lookups.
+	p.excludeSet = make(map[string]bool, len(p.Exclude))
+	for _, e := range p.Exclude {
+		p.excludeSet[e] = true
+	}
+
 	schema := &ir.Schema{
 		Driver:   p.Driver,
 		TableMap: map[string]*ir.Table{},
@@ -51,7 +58,11 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 			continue
 		}
 		t, err := p.parseModelFile(f)
-		if err != nil || t == nil {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  [parser] WARNING: skipping %s: %v\n", filepath.Base(f), err)
+			continue
+		}
+		if t == nil {
 			continue
 		}
 		// Skip tables with no primary key (e.g. composite PK join tables)
@@ -179,8 +190,8 @@ func (p *Parser) resolveRelationships(schema *ir.Schema) error {
 			if !strings.HasSuffix(c.Name, "_id") {
 				continue
 			}
-			// Infer target table name from column: user_id → users
-			targetName := strings.TrimSuffix(c.Name, "_id") + "s"
+			// Infer target table name from column: user_id → users, person_id → people
+			targetName := flect.Pluralize(strings.TrimSuffix(c.Name, "_id"))
 			targetTable, ok := schema.TableMap[targetName]
 			if !ok || targetTable.PrimaryKey == nil {
 				continue
@@ -299,12 +310,7 @@ func isNullableType(expr ast.Expr) bool {
 }
 
 func (p *Parser) isExcluded(name string) bool {
-	for _, e := range p.Exclude {
-		if e == name {
-			return true
-		}
-	}
-	return false
+	return p.excludeSet[name]
 }
 
 func isBoilerplateFile(path string) bool {

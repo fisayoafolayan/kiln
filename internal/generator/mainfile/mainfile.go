@@ -3,9 +3,7 @@
 package mainfile
 
 import (
-	"bytes"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,18 +49,8 @@ func (g *Generator) Run() ([]string, error) {
 
 	data := g.templateData()
 
-	var buf bytes.Buffer
-	if err := g.tmpl.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("executing main template: %w", err)
-	}
-
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		formatted = buf.Bytes()
-	}
-
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return nil, fmt.Errorf("writing cmd/server/main.go: %w", err)
+	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+		return nil, err
 	}
 
 	return []string{path}, nil

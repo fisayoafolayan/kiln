@@ -2,7 +2,12 @@
 package genopt
 
 import (
+	"bytes"
+	"fmt"
+	"go/format"
+	"os"
 	"strings"
+	"text/template"
 
 	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/fisayoafolayan/kiln/internal/ir"
@@ -45,6 +50,27 @@ func NewOptions(modulePath string, cfg *config.Config, schema *ir.Schema) Option
 		Config:     cfg,
 		Schema:     schema,
 	}
+}
+
+// ExecuteAndWrite executes a Go template, formats the output with gofmt,
+// and writes the result to path. Returns an error if formatting fails
+// (the unformatted output is still written for debugging).
+func ExecuteAndWrite(tmpl *template.Template, data any, path string) error {
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("executing template: %w", err)
+	}
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		// Write unformatted output so the user can debug the template,
+		// but still return the formatting error.
+		_ = os.WriteFile(path, buf.Bytes(), 0644)
+		return fmt.Errorf("formatting %q: %w (unformatted output written for debugging)", path, err)
+	}
+	if err := os.WriteFile(path, formatted, 0644); err != nil {
+		return fmt.Errorf("writing %q: %w", path, err)
+	}
+	return nil
 }
 
 // dialectFor returns the Dialect for the given driver string.

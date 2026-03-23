@@ -2,9 +2,7 @@
 package router
 
 import (
-	"bytes"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -51,17 +49,8 @@ func (g *Generator) Diff() []string {
 func (g *Generator) writeRouter(outDir string) (string, error) {
 	data := g.templateData()
 	path := filepath.Join(outDir, "router.go")
-
-	var buf bytes.Buffer
-	if err := g.tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing router template: %w", err)
-	}
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		formatted = buf.Bytes()
-	}
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return "", fmt.Errorf("writing %q: %w", path, err)
+	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+		return "", err
 	}
 	return path, nil
 }

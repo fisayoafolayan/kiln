@@ -2,9 +2,7 @@
 package store
 
 import (
-	"bytes"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,16 +111,8 @@ func (g *Generator) writeMapper(t *ir.Table, outDir string) (string, bool, error
 }
 
 func (g *Generator) writeFile(tmpl *template.Template, data templateData, path string) (string, error) {
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing template: %w", err)
-	}
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		formatted = buf.Bytes()
-	}
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return "", fmt.Errorf("writing %q: %w", path, err)
+	if err := genopt.ExecuteAndWrite(tmpl, data, path); err != nil {
+		return "", err
 	}
 	return path, nil
 }
@@ -146,7 +136,7 @@ type templateData struct {
 func (g *Generator) templateData(t *ir.Table) templateData {
 	override := g.opts.Config.OverrideFor(t.Name)
 
-	modelsDir := strings.TrimPrefix(g.opts.Config.Bob.ModelsDir, "./")
+	modelsDir := strings.TrimPrefix(filepath.ToSlash(g.opts.Config.Bob.ModelsDir), "./")
 	modelsPath := g.opts.ModulePath + "/" + modelsDir
 
 	var writable, visible []*ir.Column
