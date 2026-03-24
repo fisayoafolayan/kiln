@@ -40,6 +40,8 @@ kiln generate    # generates your full API
 go run cmd/server/main.go
 ```
 
+See the [blog API example](examples/blog-api/) for a complete, runnable project.
+
 ---
 
 ## Sample Schema
