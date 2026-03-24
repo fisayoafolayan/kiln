@@ -234,7 +234,7 @@ import (
 {{end}}
 	"github.com/aarondl/opt/omit"
 	{{if or (hasNullableWritable .WritableCols) (hasSoftDelete .Table)}}"github.com/aarondl/opt/omitnull"
-	{{end}}{{if filterNeedsUUID .FilterableCols}}"github.com/gofrs/uuid/v5"
+	{{end}}{{if or (filterNeedsUUID .FilterableCols) (.Table.PKIsUUID)}}"github.com/gofrs/uuid/v5"
 	{{end}}{{if .NeedsClientID}}"github.com/google/uuid"
 	{{end}}"github.com/stephenafamo/bob"
 	"{{.DialectImport}}"
