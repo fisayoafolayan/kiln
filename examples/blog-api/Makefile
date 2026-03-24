@@ -1,4 +1,4 @@
-.PHONY: up down setup generate run seed reset
+.PHONY: up down setup generate run seed reset clean
 
 up: ## Start Postgres
 	docker compose up -d
@@ -28,7 +28,10 @@ run: ## Start the server
 seed: ## Re-apply seed data
 	docker compose exec -T postgres psql -U blog -d blog < seed.sql
 
-reset: down ## Reset everything: stop DB, remove volumes, restart
+clean: ## Remove all generated code (use after changing kiln.yaml)
+	rm -rf generated cmd models factory dbinfo dberrors docs bobgen.yaml
+
+reset: down clean ## Reset everything: stop DB, remove generated code, re-setup
 	docker compose down -v
 	$(MAKE) setup
 
