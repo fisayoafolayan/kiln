@@ -67,11 +67,13 @@ func (g *Generator) Diff() []string {
 // ---------------------------------------------------------------------------
 
 type templateData struct {
-	Title       string
-	Version     string
-	Description string
-	BasePath    string
-	Tables      []tableData
+	Title        string
+	Version      string
+	Description  string
+	BasePath     string
+	Tables       []tableData
+	AuthStrategy string // "none", "jwt", "api_key"
+	AuthHeader   string
 }
 
 type tableData struct {
@@ -104,10 +106,12 @@ type fieldData struct {
 func (g *Generator) templateData() templateData {
 	cfg := g.opts.Config
 	data := templateData{
-		Title:       cfg.OpenAPI.Title,
-		Version:     cfg.OpenAPI.Version,
-		Description: cfg.OpenAPI.Description,
-		BasePath:    cfg.API.BasePath,
+		Title:        cfg.OpenAPI.Title,
+		Version:      cfg.OpenAPI.Version,
+		Description:  cfg.OpenAPI.Description,
+		BasePath:     cfg.API.BasePath,
+		AuthStrategy: cfg.Auth.Strategy,
+		AuthHeader:   cfg.Auth.Header,
 	}
 
 	for _, t := range g.opts.Schema.Tables {
@@ -230,7 +234,13 @@ info:
 {{- if .Description}}
   description: {{.Description}}
 {{- end}}
-
+{{if eq .AuthStrategy "jwt"}}
+security:
+  - bearerAuth: []
+{{end}}{{if eq .AuthStrategy "api_key"}}
+security:
+  - apiKeyAuth: []
+{{end}}
 paths:
 {{range .Tables}}
 {{- $table := . }}
@@ -477,4 +487,16 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-`
+{{if eq .AuthStrategy "jwt"}}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+{{end}}{{if eq .AuthStrategy "api_key"}}
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: {{.AuthHeader}}
+{{end}}`

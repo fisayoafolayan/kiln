@@ -75,6 +75,7 @@ type templateData struct {
 	DriverImport string
 	DriverName   string
 	Tables       []*ir.Table
+	AuthEnabled  bool
 }
 
 func (g *Generator) templateData() templateData {
@@ -92,6 +93,7 @@ func (g *Generator) templateData() templateData {
 		DriverImport: g.opts.Dialect.DriverImport,
 		DriverName:   g.opts.Dialect.DriverName,
 		Tables:       tables,
+		AuthEnabled:  g.opts.Config.Auth.Strategy != "none",
 	}
 }
 
@@ -109,7 +111,8 @@ import (
 	"github.com/stephenafamo/bob"
 	_ "{{.DriverImport}}"
 	"{{.ImportPath}}"
-	"{{.ImportPath}}/handlers"
+{{if .AuthEnabled}}	"{{.ImportPath}}/auth"
+{{end}}	"{{.ImportPath}}/handlers"
 	"{{.ImportPath}}/store"
 )
 
@@ -142,10 +145,14 @@ func main() {
 {{end}}	)
 
 	// 5. Start the server.
+{{if .AuthEnabled}}	// Auth middleware wraps all routes.
+	// Edit generated/auth/middleware.go to implement your validation logic.
+	handler := auth.Middleware(mux)
+{{end}}
 	addr := ":{{.Port}}"
 	log.Printf("kiln server listening on http://localhost%s", addr)
 	log.Printf("API base path: {{.BasePath}}")
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, {{if .AuthEnabled}}handler{{else}}mux{{end}}); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

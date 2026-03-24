@@ -99,6 +99,10 @@ func testConfig(t *testing.T, outDir string) *config.Config {
 			BasePath:  "/api/v1",
 			Framework: "stdlib",
 		},
+		Auth: config.AuthConfig{
+			Strategy: "none",
+			Header:   "Authorization",
+		},
 		Bob: config.BobConfig{
 			ModelsDir: filepath.Join(outDir, "models"),
 		},

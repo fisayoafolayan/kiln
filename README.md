@@ -93,6 +93,7 @@ written by hand.
 | `generated/store/mappers/users.go` | Type mapper - yours to customise (write-once)          |
 | `generated/handlers/users.go` | Full CRUD HTTP handlers                                |
 | `generated/handlers/helpers.go` | Error helpers, pagination, validator (write-once)      |
+| `generated/auth/middleware.go` | Auth middleware — JWT or API key (write-once)           |
 | `generated/router.go` | Route registration, including FK-derived nested routes |
 | `docs/openapi.yaml` | OpenAPI 3.0 spec, always in sync                       |
 | `cmd/server/main.go` | Wired-up server, ready to run (write-once)             |
@@ -292,6 +293,10 @@ api:
   base_path: "/api/v1"          # prefix for all routes
   framework: stdlib             # stdlib (chi/gin planned)
 
+auth:
+  strategy: none                # none | jwt | api_key
+  header: Authorization         # header to read credentials from
+
 bob:
   enabled: true                 # set to false to skip schema introspection
   models_dir: "./models"        # where bob writes its models
@@ -398,7 +403,7 @@ When adding a new feature:
 - [x] Bob version compatibility checking
 - [ ] chi / gin framework support
 - [ ] Filtering & pagination config
-- [ ] Authentication middleware hooks
+- [x] Authentication middleware (JWT and API key)
 - [ ] Checksum-based regeneration safety
 
 ---

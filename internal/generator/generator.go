@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fisayoafolayan/kiln/internal/config"
+	"github.com/fisayoafolayan/kiln/internal/generator/auth"
 	"github.com/fisayoafolayan/kiln/internal/generator/genopt"
 	"github.com/fisayoafolayan/kiln/internal/generator/handlers"
 	"github.com/fisayoafolayan/kiln/internal/generator/mainfile"
@@ -102,6 +103,7 @@ func (g *Generator) steps() []step {
 		{cfg.Generate.IsEnabled("handlers"), asRunnable(handlers.New)},
 		{cfg.Generate.IsEnabled("router"), asRunnable(router.New)},
 		{cfg.Generate.IsEnabled("openapi") && cfg.OpenAPI.Enabled, asRunnable(openapi.New)},
+		{cfg.Auth.Strategy != "none", asRunnable(auth.New)},
 		{true, asRunnable(mainfile.New)}, // always run, write-once
 	}
 	var enabled []step
