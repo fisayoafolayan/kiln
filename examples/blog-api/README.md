@@ -54,7 +54,7 @@ All with an OpenAPI spec at `docs/openapi.yaml`.
 
 ## Prerequisites
 
-- Go 1.22+
+- Go 1.26+
 - Docker
 - kiln (`go install github.com/fisayoafolayan/kiln/cmd/kiln@latest`)
 

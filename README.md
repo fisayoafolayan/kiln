@@ -1,14 +1,14 @@
 # kiln
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.22-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.26-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 
-> Turn your database schema into a production-ready Go API.
+> Compile your database schema into a production-ready Go API.
 >
 > Eliminate schema drift - your API always matches your schema.
-> No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+> Zero runtime dependency. No framework lock-in. Delete kiln — your code still compiles.
 
 ## Table of Contents
 
@@ -54,6 +54,14 @@ Schema changes? Regenerate. Your API is correct by construction.
 
 *Ideal for CRUD-heavy APIs and backends where the schema evolves frequently.*
 
+### Before kiln
+
+You write: structs, validation tags, handlers, router, OpenAPI spec, error handling, pagination, filtering. For every table. Again when the schema changes.
+
+### After kiln
+
+You write: the schema. kiln generates everything else.
+
 Think of kiln like a compiler: the schema is your source, `kiln generate` is
 the compile step, and the output is a working API. Change the schema, recompile.
 
@@ -61,7 +69,7 @@ the compile step, and the output is a working API. Change the schema, recompile.
 
 ## Requirements
 
-- Go 1.22 or later
+- Go 1.26 or later
 - Docker (for running a local database during development)
 - A Postgres, MySQL/MariaDB, or SQLite database
 
@@ -80,7 +88,19 @@ kiln generate    # generates your full API
 go run cmd/server/main.go
 ```
 
-See the [blog API example](examples/blog-api/) for a complete, runnable project.
+### Try the example
+
+```bash
+git clone https://github.com/fisayoafolayan/kiln.git
+cd kiln/examples/blog-api
+cp .env.example .env
+make setup && make run
+
+# In another terminal:
+curl http://localhost:8080/api/v1/users | jq
+```
+
+See the [blog API example](examples/blog-api/) for the full walkthrough.
 
 ---
 
@@ -154,6 +174,13 @@ Need business logic beyond CRUD? kiln stays out of your way:
 - **Wrap or replace handlers** - the store uses interfaces, mock or swap anything
 - **Disable generated endpoints** per table and write your own
 - **Delete and replace anything** - it's your code, not a framework
+
+```go
+// Disable the generated "update" for posts, add your own with business logic:
+func (h *PostHandler) Publish(w http.ResponseWriter, r *http.Request) {
+    // custom validation, state transitions, notifications — your code
+}
+```
 
 You're never locked in. The generated code is just Go.
 
@@ -641,6 +668,16 @@ All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
 - **Not one-shot scaffolding** - regenerate safely as your schema evolves
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
+
+### Where kiln is not a good fit
+
+kiln works best for CRUD-heavy APIs. It may not be the right tool if:
+
+- Your API is workflow-driven (payments, state machines, multi-step processes)
+- You rely on complex joins or hand-tuned SQL queries
+- Your schema is not the source of truth for your domain
+
+For these cases, kiln can still generate the boilerplate layers (models, OpenAPI) while you write the rest by hand.
 
 ---
 

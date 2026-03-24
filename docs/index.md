@@ -1,8 +1,8 @@
 # kiln
 
-**Turn your database schema into a production-ready Go API.**
+**Compile your database schema into a production-ready Go API.**
 
-Eliminate schema drift - your API always matches your schema. No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+Eliminate schema drift - your API always matches your schema. Zero runtime dependency. No framework lock-in. Delete kiln - your code still compiles.
 
 ## The Problem
 
@@ -77,7 +77,17 @@ kiln is the only tool that goes from database schema to **runnable REST API** in
 - **Not a framework** - no runtime control, no hidden magic
 - **Not one-shot scaffolding** - regenerate safely as your schema evolves
 
-kiln is a compiler for APIs. Schema in, Go code out.
+kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
+
+### Where kiln is not a good fit
+
+kiln works best for CRUD-heavy APIs. It may not be the right tool if:
+
+- Your API is workflow-driven (payments, state machines, multi-step processes)
+- You rely on complex joins or hand-tuned SQL queries
+- Your schema is not the source of truth for your domain
+
+For these cases, kiln can still generate the boilerplate layers (models, OpenAPI) while you write the rest by hand.
 
 ## Schema Evolution
 
