@@ -4,8 +4,33 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
 
-> Turn your database schema into a production-ready Go API.  
+> Turn your database schema into a production-ready Go API.
 > No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Sample Schema](#sample-schema)
+- [What Gets Generated](#what-gets-generated)
+- [Generated Code Example](#generated-code-example)
+- [Validation](#validation)
+- [Database Support](#database-support)
+- [Brownfield Adoption](#brownfield-adoption)
+  - [Write-Once Files](#write-once-files)
+  - [Schema Changes](#schema-changes)
+  - [Testing Generated Code](#testing-generated-code)
+- [How It Works](#how-it-works)
+- [Why Not sqlc?](#why-not-sqlc)
+- [Configuration](#configuration)
+  - [Filtering & Sorting](#filtering--sorting)
+  - [Enum Validation](#enum-validation)
+  - [Soft Deletes](#soft-deletes)
+- [CLI](#cli)
+- [Philosophy](#philosophy)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
 
 ---
 
@@ -95,7 +120,7 @@ written by hand.
 | `generated/store/mappers/users.go` | Type mapper - yours to customise (write-once)          |
 | `generated/handlers/users.go` | Full CRUD HTTP handlers                                |
 | `generated/handlers/helpers.go` | Error helpers, pagination, validator (write-once)      |
-| `generated/auth/middleware.go` | Auth middleware — JWT or API key (write-once)           |
+| `generated/auth/middleware.go` | Auth middleware - JWT or API key (write-once)          |
 | `generated/router.go` | Route registration, including FK-derived nested routes |
 | `docs/openapi.yaml` | OpenAPI 3.0 spec, always in sync                       |
 | `cmd/server/main.go` | Wired-up server, ready to run (write-once)             |
@@ -249,6 +274,49 @@ func UserToType(m *dbmodels.User) *models.User {
 
 Change your schema, regenerate - your mapper is untouched.
 
+### Schema Changes
+
+When your database schema changes (new column, new table, renamed field):
+
+1. Apply the migration to your database (using goose, atlas, golang-migrate, or raw SQL)
+2. Run `kiln generate`
+
+Kiln regenerates all auto-generated files. Files you've edited are **skipped** with a warning:
+
+```
+  ⚠ SKIPPED  generated/store/users.go (user-modified; use --force to overwrite)
+  ✓ generated/models/users.go
+  ✓ generated/handlers/users.go
+```
+
+To see what would change without writing: `kiln diff`
+
+To force-regenerate everything: `kiln generate --force`
+
+Write-once files (mappers, helpers, main.go) are never touched - you'll need to update those manually when columns change.
+
+### Testing Generated Code
+
+kiln doesn't generate tests - testing strategies are too project-specific. But the generated code is straightforward to test:
+
+**Handlers** depend on a store interface, not a concrete type. Mock the interface:
+
+```go
+type mockUserStore struct{}
+
+func (m *mockUserStore) Get(ctx context.Context, id uuid.UUID) (*models.User, error) {
+    return &models.User{Name: "Alice"}, nil
+}
+```
+
+**Store methods** are single-query functions that work against any `bob.DB`. Pass a test database connection:
+
+```go
+db := bob.NewDB(testDB) // real DB or txdb for isolation
+store := store.NewUserStore(db)
+user, err := store.Get(ctx, id)
+```
+
 ---
 
 ## How It Works
@@ -269,13 +337,46 @@ Your Database Schema
 ```
 
 kiln uses [bob](https://github.com/stephenafamo/bob) (v0.42.0+) under the hood
-to read your database schema. You don't need to know bob - kiln sets it up and
-manages it automatically.
+to read your database schema. You don't need to learn bob - kiln installs it,
+configures it, and manages `bobgen.yaml` automatically.
+
+**What bob handles:** schema introspection, column type resolution, foreign key
+detection, and Go model generation (`./models/`). If you hit a type that kiln
+doesn't recognise or a column that behaves unexpectedly, bob's generated
+`dbinfo/` files are the place to look - they contain the raw schema metadata
+kiln reads from.
 
 **Foreign key resolution:** kiln reads bob's generated relationship structs to
 accurately resolve FK relationships - even when column names don't match table
 names (e.g. `author_id → users`). This is how nested routes like
 `GET /users/{id}/posts` are discovered automatically.
+
+**Known bob limitations:**
+- Composite primary keys are detected but not supported for code generation (kiln warns and skips)
+- Postgres array types (`text[]`) require bob v0.42.0+ for correct Go type mapping
+- Custom Postgres types (ltree, ranges) are mapped to `string`
+
+---
+
+## Why Not sqlc?
+
+[sqlc](https://github.com/sqlc-dev/sqlc) generates type-safe Go code from
+hand-written SQL queries. It's excellent - but it stops at the database layer.
+
+kiln generates the **full HTTP layer on top**: request/response types with
+validation, handlers, a router, and an OpenAPI spec. You don't write SQL or
+handler code. If sqlc gives you a type-safe database client, kiln gives you
+a runnable API server.
+
+| | sqlc | kiln |
+|---|------|------|
+| Input | Hand-written SQL queries | Database schema |
+| Output | Go types + query functions | Types + store + handlers + router + OpenAPI |
+| You write | SQL + handlers + router | kiln.yaml |
+| Runtime dependency | None | None |
+
+Use sqlc when you need fine-grained control over every query. Use kiln when
+you want a working API from your schema with minimal code.
 
 ---
 
@@ -515,6 +616,8 @@ When adding a new feature:
 - [ ] Relationship loading (`?include=author`)
 - [ ] Transaction support in store
 - [ ] Batch create/update/delete endpoints
+- [ ] Test scaffolding (generated test helpers and fixtures)
+- [ ] Multi-tenancy / row-level scoping (`tenant_id` auto-injection)
 
 ---
 
