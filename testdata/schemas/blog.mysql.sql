@@ -1,4 +1,4 @@
--- Blog schema - MySQL 8
+-- Blog schema -t MySQL 8
 -- Uses: CHAR(36) for UUIDs, DATETIME, VARCHAR, UUID() function
 -- MySQL has no native UUID type — stored as CHAR(36)
 
@@ -29,6 +29,7 @@ CREATE TABLE posts (
                        published_at DATETIME,
                        created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
                        updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                       deleted_at   DATETIME,
                        CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

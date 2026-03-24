@@ -25,7 +25,8 @@ CREATE TABLE posts (
                        status       TEXT     NOT NULL DEFAULT 'draft',
                        published_at DATETIME,
                        created_at   DATETIME NOT NULL DEFAULT (datetime('now')),
-                       updated_at   DATETIME NOT NULL DEFAULT (datetime('now'))
+                       updated_at   DATETIME NOT NULL DEFAULT (datetime('now')),
+                       deleted_at   DATETIME
 );
 
 CREATE TABLE comments (

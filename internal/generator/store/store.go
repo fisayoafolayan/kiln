@@ -147,13 +147,13 @@ func (g *Generator) templateData(t *ir.Table) templateData {
 
 	var writable, visible, filterable, sortable []*ir.Column
 	for _, c := range t.Columns {
-		if !override.IsFieldHidden(c.Name) {
+		if !override.IsFieldHidden(c.Name) && !c.IsSoftDeleteColumn() {
 			visible = append(visible, c)
 		}
 		if !c.IsReadOnly() && !override.IsFieldHidden(c.Name) && !override.IsFieldReadonly(c.Name) {
 			writable = append(writable, c)
 		}
-		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() {
+		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() && !c.IsSoftDeleteColumn() {
 			filterable = append(filterable, c)
 		}
 		if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() {
@@ -203,6 +203,9 @@ func funcMap() template.FuncMap {
 			}
 			return false
 		},
+		"hasSoftDelete": func(t *ir.Table) bool {
+			return t.HasSoftDelete()
+		},
 		"filterNeedsUUID": func(cols []*ir.Column) bool {
 			for _, c := range cols {
 				if c.GoType.Name == "uuid.UUID" {
@@ -227,10 +230,10 @@ package store
 import (
 	"context"
 	"fmt"
-{{if filterNeedsTime .FilterableCols}}	"time"
+{{if or (filterNeedsTime .FilterableCols) (hasSoftDelete .Table)}}	"time"
 {{end}}
 	"github.com/aarondl/opt/omit"
-	{{if hasNullableWritable .WritableCols}}"github.com/aarondl/opt/omitnull"
+	{{if or (hasNullableWritable .WritableCols) (hasSoftDelete .Table)}}"github.com/aarondl/opt/omitnull"
 	{{end}}{{if filterNeedsUUID .FilterableCols}}"github.com/gofrs/uuid/v5"
 	{{end}}{{if .NeedsClientID}}"github.com/google/uuid"
 	{{end}}"github.com/stephenafamo/bob"
@@ -257,7 +260,8 @@ func New{{.Table.GoName}}Store(db bob.DB) *{{.Table.GoName}}Store {
 func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName}}) (*models.{{.Table.GoName}}, error) {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
-	).One(ctx, s.db)
+{{if hasSoftDelete .Table}}		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+{{end}}	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Get: %w", err)
 	}
@@ -285,6 +289,9 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, f
 
 	// Build WHERE clauses from filter.
 	var whereMods []bob.Mod[*dialect.SelectQuery]
+{{if hasSoftDelete .Table}}	// Exclude soft-deleted records.
+	whereMods = append(whereMods, sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()))
+{{end}}
 {{range .FilterableCols}}	if filter.{{.GoName}} != nil {
 		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.EQ({{$.BobPkg}}.Arg(*filter.{{.GoName}}))))
 	}
@@ -340,7 +347,8 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
 	rows, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
-		sm.Limit(int64(pageSize)),
+{{if hasSoftDelete $.Table}}		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+{{end}}		sm.Limit(int64(pageSize)),
 		sm.Offset(int64((page-1)*pageSize)),
 	).All(ctx, s.db)
 	if err != nil {
@@ -348,7 +356,8 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 	}
 	count, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
-	).Count(ctx, s.db)
+{{if hasSoftDelete $.Table}}		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+{{end}}	).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}} count: %w", err)
 	}
@@ -396,7 +405,8 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{
 func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req models.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
-	).One(ctx, s.db)
+{{if hasSoftDelete .Table}}		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+{{end}}	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Update find: %w", err)
 	}
@@ -416,7 +426,24 @@ func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeN
 {{end}}
 
 {{if isOperationEnabled "delete" .Override}}
-// Delete removes a {{.Table.GoName}} record by primary key.
+{{if hasSoftDelete .Table}}// Delete soft-deletes a {{.Table.GoName}} record by setting deleted_at.
+func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+	).One(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("{{.Table.Name}}.Delete find: %w", err)
+	}
+	setter := &dbmodels.{{.Table.GoName}}Setter{
+		DeletedAt: omitnull.From(time.Now()),
+	}
+	if err := row.Update(ctx, s.db, setter); err != nil {
+		return fmt.Errorf("{{.Table.Name}}.Delete: %w", err)
+	}
+	return nil
+}
+{{else}}// Delete removes a {{.Table.GoName}} record by primary key.
 func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
@@ -429,7 +456,7 @@ func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeN
 	}
 	return nil
 }
-{{end}}
+{{end}}{{end}}
 `
 
 // ---------------------------------------------------------------------------

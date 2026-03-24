@@ -408,6 +408,25 @@ Invalid values return a structured error:
 
 Config values always take precedence over auto-detected constraints.
 
+### Soft Deletes
+
+If a table has a nullable `deleted_at` timestamp column, kiln automatically generates soft delete behavior:
+
+```sql
+CREATE TABLE posts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title      TEXT NOT NULL,
+  deleted_at TIMESTAMPTZ  -- nullable = soft delete enabled
+);
+```
+
+No config needed. Kiln detects `deleted_at` and:
+
+- **DELETE** sets `deleted_at = now()` instead of removing the row
+- **GET/LIST** adds `WHERE deleted_at IS NULL` to exclude soft-deleted records
+- **UPDATE** prevents modifying soft-deleted records
+- **Response types** exclude the `deleted_at` field (it's internal)
+
 ---
 
 ## CLI

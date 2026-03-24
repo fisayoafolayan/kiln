@@ -104,6 +104,21 @@ func (t *Table) PKIsStringLike() bool {
 	return name == "string" || name == "uuid.UUID"
 }
 
+// SoftDeleteColumn returns the soft-delete column if this table has one, or nil.
+func (t *Table) SoftDeleteColumn() *Column {
+	for _, c := range t.Columns {
+		if c.IsSoftDeleteColumn() {
+			return c
+		}
+	}
+	return nil
+}
+
+// HasSoftDelete returns true if this table uses soft delete.
+func (t *Table) HasSoftDelete() bool {
+	return t.SoftDeleteColumn() != nil
+}
+
 // Column represents a single column in a table.
 type Column struct {
 	Name         string
@@ -169,6 +184,11 @@ func (c *Column) IsReadOnly() bool {
 		return autoManagedTimestamps[c.Name]
 	}
 	return false
+}
+
+// IsSoftDeleteColumn returns true if this column is a nullable deleted_at timestamp.
+func (c *Column) IsSoftDeleteColumn() bool {
+	return c.Name == "deleted_at" && c.Nullable && c.GoType.Name == "time.Time"
 }
 
 // GoType is a database-agnostic Go type resolved from the raw DB type.

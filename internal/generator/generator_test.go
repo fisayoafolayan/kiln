@@ -31,6 +31,7 @@ func testSchema() *ir.Schema {
 		{Name: "role", GoType: ir.GoTypeString, HasDefault: true, Ordinal: 4},
 		{Name: "created_at", GoType: ir.GoTypeTime, HasDefault: true, Ordinal: 5},
 		{Name: "updated_at", GoType: ir.GoTypeTime, HasDefault: true, Ordinal: 6},
+		{Name: "deleted_at", GoType: ir.GoTypeTime, Nullable: true, Ordinal: 7},
 	}
 
 	for _, c := range cols {
@@ -560,6 +561,44 @@ func TestUnmodifiedFileIsRegenerated(t *testing.T) {
 
 // TestGeneratedFilesParseAsValidGo verifies every generated .go file
 // is syntactically valid Go — no compiler, no network, no go.sum needed.
+func TestSoftDeleteGeneratesCorrectStore(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+
+	g := generator.New(cfg, testSchema())
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("generator.Run() failed: %v", err)
+	}
+
+	// Store should have soft delete logic.
+	storeContent, err := os.ReadFile(filepath.Join(outDir, "store/users.go"))
+	if err != nil {
+		t.Fatalf("reading store/users.go: %v", err)
+	}
+	storeSrc := string(storeContent)
+
+	if !strings.Contains(storeSrc, "DeletedAt.IsNull()") {
+		t.Error("store should contain DeletedAt.IsNull() for soft delete WHERE clause")
+	}
+	if !strings.Contains(storeSrc, "omitnull.From(time.Now())") {
+		t.Error("store Delete should SET deleted_at via omitnull.From(time.Now())")
+	}
+	if strings.Contains(storeSrc, "row.Delete(ctx") {
+		t.Error("store should NOT contain hard delete (row.Delete) when soft delete is active")
+	}
+
+	// Types should NOT contain deleted_at field.
+	typesContent, err := os.ReadFile(filepath.Join(outDir, "models/users.go"))
+	if err != nil {
+		t.Fatalf("reading models/users.go: %v", err)
+	}
+	typesSrc := string(typesContent)
+
+	if strings.Contains(typesSrc, "DeletedAt") {
+		t.Error("response type should NOT contain DeletedAt field")
+	}
+}
+
 func TestGeneratedFilesParseAsValidGo(t *testing.T) {
 	outDir := t.TempDir()
 	cfg := testConfig(t, outDir)

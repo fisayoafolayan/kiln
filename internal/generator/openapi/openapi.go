@@ -138,7 +138,7 @@ func (g *Generator) templateData() templateData {
 		}
 
 		for _, c := range t.Columns {
-			if override.IsFieldHidden(c.Name) {
+			if override.IsFieldHidden(c.Name) || c.IsSoftDeleteColumn() {
 				continue
 			}
 			fd := toFieldData(c)

@@ -27,7 +27,8 @@ CREATE TABLE posts (
                        status       TEXT        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
                        published_at TIMESTAMPTZ,
                        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-                       updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+                       updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                       deleted_at   TIMESTAMPTZ
 );
 
 CREATE TABLE comments (

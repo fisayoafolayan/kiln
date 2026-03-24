@@ -119,7 +119,7 @@ func funcMap() template.FuncMap {
 	return template.FuncMap{
 		// isVisible returns true if a column should appear in response structs.
 		"isVisible": func(c *ir.Column, o config.TableOverride) bool {
-			return !o.IsFieldHidden(c.Name)
+			return !o.IsFieldHidden(c.Name) && !c.IsSoftDeleteColumn()
 		},
 		// isWritable returns true if a column should appear in Create/Update structs.
 		"isWritable": func(c *ir.Column, o config.TableOverride) bool {
