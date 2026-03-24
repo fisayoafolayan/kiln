@@ -251,8 +251,8 @@ import (
 type {{.Table.GoName}}Store interface {
 {{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id {{.Table.PKTypeName}}) (*models.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int, filter store.{{.Table.GoName}}ListFilter) ([]models.{{.Table.GoName}}, int, error)
-{{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
+{{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req models.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
+{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req models.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id {{.Table.PKTypeName}}) error
 {{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]models.{{$.Table.GoName}}, int, error)
 {{end}}}
@@ -342,7 +342,7 @@ func (h *{{.Table.GoName}}Handler) List(w http.ResponseWriter, r *http.Request) 
 		handleStoreError(w, err, "{{.Table.Name}}", "list")
 		return
 	}
-	writeJSON(w, http.StatusOK, types.List{{.Table.GoNamePlural}}Response{
+	writeJSON(w, http.StatusOK, models.List{{.Table.GoNamePlural}}Response{
 		Data:     rows,
 		Total:    total,
 		Page:     page,
@@ -354,7 +354,7 @@ func (h *{{.Table.GoName}}Handler) List(w http.ResponseWriter, r *http.Request) 
 {{if isOperationEnabled "create" .Override}}
 // Create handles POST /{{.Table.Endpoint}}
 func (h *{{.Table.GoName}}Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var req types.Create{{.Table.GoName}}Request
+	var req models.Create{{.Table.GoName}}Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -397,7 +397,7 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}{{end}}
-	var req types.Update{{.Table.GoName}}Request
+	var req models.Update{{.Table.GoName}}Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -481,7 +481,7 @@ func (h *{{$.Table.GoName}}Handler) ListBy{{.TargetTable.GoName}}(w http.Respons
 		handleStoreError(w, err, "{{$.Table.Name}}", "list")
 		return
 	}
-	writeJSON(w, http.StatusOK, types.List{{$.Table.GoNamePlural}}Response{
+	writeJSON(w, http.StatusOK, models.List{{$.Table.GoNamePlural}}Response{
 		Data:     rows,
 		Total:    total,
 		Page:     page,

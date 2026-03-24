@@ -358,7 +358,7 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 
 {{if isOperationEnabled "create" .Override}}
 // Create inserts a new {{.Table.GoName}} record.
-func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
+func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
 	{{if .NeedsClientID}}// Generate ID in Go — required for MySQL/SQLite which lack RETURNING support.
 	newID := uuid.New().String()
 	setter := &dbmodels.{{.Table.GoName}}Setter{
@@ -393,7 +393,7 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.
 
 {{if isOperationEnabled "update" .Override}}
 // Update modifies an existing {{.Table.GoName}} record.
-func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
+func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req models.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
