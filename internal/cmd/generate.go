@@ -31,21 +31,26 @@ handlers, router, and OpenAPI spec.`,
 				return err
 			}
 
-			// Step 1 - ensure bob is available, offer to install if not
+			// Step 1 - ensure bob is available, write bobgen.yaml, run schema introspection
 			if cfg.Bob.IsEnabled() && !noBob {
 				if err := ensureBob(cfg.Database.Driver); err != nil {
 					return err
 				}
+				// Write bobgen.yaml if it doesn't exist.
 				if _, err := os.Stat("bobgen.yaml"); os.IsNotExist(err) {
-					return fmt.Errorf(
-						"bobgen.yaml not found\n\n" +
-							"  Run `kiln init` to set up your project first.",
-					)
+					dsn, err := cfg.Database.ResolvedDSN()
+					if err != nil {
+						return fmt.Errorf("resolving database DSN: %w", err)
+					}
+					bobConfig := buildBobConfig(cfg.Database.Driver, dsn, cfg.Bob.ModelsDir)
+					if err := os.WriteFile("bobgen.yaml", []byte(bobConfig), 0644); err != nil {
+						return fmt.Errorf("writing bobgen.yaml: %w", err)
+					}
 				}
 				fmt.Println("  Reading database schema...")
 				if err := runBobGen(cfg.Database.Driver); err != nil {
 					return fmt.Errorf("failed to read schema: %w\n\n"+
-						"  Make sure your database is running and the DSN in bob.toml is correct.", err)
+						"  Make sure your database is running and the DSN in kiln.yaml is correct.", err)
 				}
 				fmt.Println("  ✓ Schema read complete")
 			}
