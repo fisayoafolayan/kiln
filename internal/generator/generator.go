@@ -57,6 +57,16 @@ type newFunc func(genopt.Options) (runnable, error)
 
 // Run executes all enabled generators and writes output files.
 func (g *Generator) Run(w io.Writer) error {
+	// Warn about skipped tables.
+	for _, t := range g.opts.Schema.Tables {
+		if !g.opts.Config.ShouldGenerateTable(t.Name) {
+			continue
+		}
+		if t.PrimaryKey == nil {
+			fmt.Fprintf(w, "  ⚠ SKIPPED  %s (composite or missing primary key - not supported yet)\n", t.Name)
+		}
+	}
+
 	for _, s := range g.steps() {
 		gen, err := s.newGen(g.opts)
 		if err != nil {
