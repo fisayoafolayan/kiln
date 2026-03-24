@@ -226,6 +226,7 @@ import (
 {{end}}
 	"github.com/aarondl/opt/omit"
 	{{if hasNullableWritable .WritableCols}}"github.com/aarondl/opt/omitnull"
+	{{end}}{{if filterNeedsUUID .FilterableCols}}"github.com/gofrs/uuid/v5"
 	{{end}}{{if .NeedsClientID}}"github.com/google/uuid"
 	{{end}}"github.com/stephenafamo/bob"
 	"{{.DialectImport}}"
@@ -387,7 +388,7 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.
 
 {{if isOperationEnabled "update" .Override}}
 // Update modifies an existing {{.Table.GoName}} record.
-func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id string, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error) {
+func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error) {
 	row, err := models.{{.Table.GoNamePlural}}.Query(
 		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)

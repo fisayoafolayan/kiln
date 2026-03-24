@@ -92,6 +92,11 @@ func (t *Table) PKTypeName() string {
 	return t.PrimaryKey.GoType.Name
 }
 
+// PKIsUUID returns true if the primary key is uuid.UUID.
+func (t *Table) PKIsUUID() bool {
+	return t.PKTypeName() == "uuid.UUID"
+}
+
 // PKIsStringLike returns true if the primary key is string or uuid.UUID,
 // meaning no conversion is needed when reading from an HTTP path parameter.
 func (t *Table) PKIsStringLike() bool {
@@ -126,19 +131,41 @@ func (c *Column) JSONName() string {
 	return c.Name
 }
 
+// autoManagedTimestamps are column names that are typically set by the
+// database (via DEFAULT now() or triggers) and should not appear in
+// Create/Update request structs.
+// Users with non-standard names should use overrides.readonly_fields.
+var autoManagedTimestamps = map[string]bool{
+	"created_at":  true,
+	"updated_at":  true,
+	"inserted_at": true,
+	"modified_at": true,
+	"deleted_at":  true,
+	"created_on":  true,
+	"updated_on":  true,
+}
+
 // IsReadOnly returns true if this column should be excluded from
 // Create and Update request structs.
 //
-// A column is auto-readonly if it is a primary key, or if it is a
-// timestamp column with a database default (e.g. created_at DEFAULT now()).
+// A column is auto-readonly if it is:
+//   - a primary key, or
+//   - a timestamp with HasDefault set (from schema introspection), or
+//   - a timestamp matching a well-known auto-managed name pattern
+//
 // For other cases, use overrides.readonly_fields in kiln.yaml.
 func (c *Column) IsReadOnly() bool {
 	if c.IsPrimaryKey {
 		return true
 	}
-	// Timestamp columns with DB defaults are typically DB-managed.
-	if c.HasDefault && c.GoType.Name == "time.Time" {
-		return true
+	if c.GoType.Name == "time.Time" {
+		// If the parser set HasDefault, trust it.
+		if c.HasDefault {
+			return true
+		}
+		// Fallback: match common auto-managed timestamp names.
+		// This handles parsers (like bob) that can't detect DB defaults.
+		return autoManagedTimestamps[c.Name]
 	}
 	return false
 }

@@ -168,6 +168,33 @@ func funcMap() template.FuncMap {
 			}
 			return false
 		},
+		"filterNeedsUUID": func(cols []*ir.Column) bool {
+			for _, c := range cols {
+				if c.GoType.Name == "uuid.UUID" {
+					return true
+				}
+			}
+			return false
+		},
+		"pkIsUUID": func(t *ir.Table) bool {
+			return t.PKTypeName() == "uuid.UUID"
+		},
+		"handlerNeedsUUID": func(t *ir.Table, filterCols []*ir.Column, fks []*ir.ForeignKey) bool {
+			if t.PKTypeName() == "uuid.UUID" {
+				return true
+			}
+			for _, c := range filterCols {
+				if c.GoType.Name == "uuid.UUID" {
+					return true
+				}
+			}
+			for _, fk := range fks {
+				if fk.TargetTable.PKTypeName() == "uuid.UUID" {
+					return true
+				}
+			}
+			return false
+		},
 		// filterParseSnippet returns the Go code to parse a query param value
 		// into a pointer of the column's Go type and assign it to a target variable.
 		"filterParseSnippet": func(c *ir.Column, target string) string {
@@ -210,7 +237,8 @@ import (
 {{end}}{{if .SortableCols}}	"strings"
 {{end}}{{if filterNeedsTime .FilterableCols}}	"time"
 {{end}}
-	"{{.ImportPath}}/store"
+{{if handlerNeedsUUID .Table .FilterableCols .ForeignKeys}}	"github.com/gofrs/uuid/v5"
+{{end}}	"{{.ImportPath}}/store"
 	"{{.ImportPath}}/types"
 )
 
@@ -237,7 +265,16 @@ func New{{.Table.GoName}}Handler(store {{.Table.GoName}}Store) *{{.Table.GoName}
 {{if isOperationEnabled "get" .Override}}
 // Get handles GET /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Get(w http.ResponseWriter, r *http.Request) {
-	{{if pkIsStringLike .Table}}id := r.PathValue("id")
+	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	id, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
@@ -251,7 +288,7 @@ func (h *{{.Table.GoName}}Handler) Get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}{{end}}
-	row, err := h.store.Get(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}})
+	row, err := h.store.Get(r.Context(), {{if pkIsUUID .Table}}id{{else if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}})
 	if err != nil {
 		handleStoreError(w, err, "{{.Table.Name}}", "get")
 		return
@@ -332,7 +369,16 @@ func (h *{{.Table.GoName}}Handler) Create(w http.ResponseWriter, r *http.Request
 {{if isOperationEnabled "update" .Override}}
 // Update handles PATCH /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request) {
-	{{if pkIsStringLike .Table}}id := r.PathValue("id")
+	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	id, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
@@ -354,7 +400,7 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 	if !validateRequest(w, req) {
 		return
 	}
-	row, err {{if pkIsStringLike .Table}}:{{end}}= h.store.Update(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}, req)
+	row, err {{if pkIsStringLike .Table}}:{{end}}= h.store.Update(r.Context(), {{if pkIsUUID .Table}}id{{else if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}, req)
 	if err != nil {
 		handleStoreError(w, err, "{{.Table.Name}}", "update")
 		return
@@ -366,7 +412,16 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 {{if isOperationEnabled "delete" .Override}}
 // Delete handles DELETE /{{.Table.Endpoint}}/{id}
 func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	{{if pkIsStringLike .Table}}id := r.PathValue("id")
+	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	id, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike .Table}}id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
@@ -380,7 +435,7 @@ func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}{{end}}
-	if err := h.store.Delete(r.Context(), {{if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}); err != nil {
+	if err := h.store.Delete(r.Context(), {{if pkIsUUID .Table}}id{{else if not (pkIsStringLike .Table)}}{{.Table.PKTypeName}}(id){{else}}id{{end}}); err != nil {
 		handleStoreError(w, err, "{{.Table.Name}}", "delete")
 		return
 	}
@@ -391,7 +446,16 @@ func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request
 {{range .ForeignKeys}}
 // ListBy{{.TargetTable.GoName}} handles GET /{{.TargetTable.Endpoint}}/{id}/{{$.Table.Endpoint}}
 func (h *{{$.Table.GoName}}Handler) ListBy{{.TargetTable.GoName}}(w http.ResponseWriter, r *http.Request) {
-	{{if .TargetTable.PKIsStringLike}}parentID := r.PathValue("id")
+	{{if .TargetTable.PKIsUUID}}parentIDStr := r.PathValue("id")
+	if parentIDStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	parentID, err := uuid.FromString(parentIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if .TargetTable.PKIsStringLike}}parentID := r.PathValue("id")
 	if parentID == "" {
 		writeError(w, http.StatusBadRequest, "missing id")
 		return
