@@ -251,7 +251,7 @@ _e2e:
 		echo '  driver: "$(DRIVER)"'; \
 		echo '  dsn: "$(DSN)"'; \
 		echo 'output:'; \
-		echo '  dir: "./output"'; \
+		echo '  dir: "./generated"'; \
 		echo '  package: generated'; \
 		echo 'api:'; \
 		echo '  base_path: "/api/v1"'; \
@@ -267,7 +267,7 @@ _e2e:
 		echo '  openapi: true'; \
 		echo 'openapi:'; \
 		echo '  enabled: true'; \
-		echo '  output: "./output/openapi.yaml"'; \
+		echo '  output: "./generated/openapi.yaml"'; \
 		echo '  title: "Blog API ($(DRIVER))"'; \
 		echo '  version: "1.0.0"'; \
 		echo 'tables:'; \
@@ -296,7 +296,7 @@ _e2e:
 		cd $(E2E_DIR) && go get github.com/mattn/go-sqlite3; \
 	fi
 	cd $(E2E_DIR) && go mod tidy
-	@echo "  ✓ $(DRIVER) output written to $(E2E_DIR)/output/"
+	@echo "  ✓ $(DRIVER) output written to $(E2E_DIR)/generated/"
 
 .PHONY: e2e/inspect
 e2e/inspect: ## List all generated files from the last e2e run
