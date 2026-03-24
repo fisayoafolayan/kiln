@@ -212,15 +212,21 @@ func (g GoType) String() string {
 // Common GoTypes - use these constants in the parser rather than
 // constructing GoType literals to keep mappings consistent.
 var (
-	GoTypeString    = GoType{Name: "string"}
-	GoTypeInt32     = GoType{Name: "int32"}
-	GoTypeInt64     = GoType{Name: "int64"}
-	GoTypeFloat64   = GoType{Name: "float64"}
-	GoTypeBool      = GoType{Name: "bool"}
-	GoTypeTime      = GoType{Name: "time.Time", Package: "time"}
-	GoTypeUUID      = GoType{Name: "uuid.UUID", Package: "github.com/gofrs/uuid/v5"}
-	GoTypeByteSlice = GoType{Name: "[]byte"}
-	GoTypeJSON      = GoType{Name: "json.RawMessage", Package: "encoding/json"}
+	GoTypeString     = GoType{Name: "string"}
+	GoTypeInt32      = GoType{Name: "int32"}
+	GoTypeInt64      = GoType{Name: "int64"}
+	GoTypeFloat64    = GoType{Name: "float64"}
+	GoTypeBool       = GoType{Name: "bool"}
+	GoTypeTime       = GoType{Name: "time.Time", Package: "time"}
+	GoTypeUUID       = GoType{Name: "uuid.UUID", Package: "github.com/gofrs/uuid/v5"}
+	GoTypeByteSlice  = GoType{Name: "[]byte"}
+	GoTypeJSON       = GoType{Name: "json.RawMessage", Package: "encoding/json"}
+	GoTypeStringArr  = GoType{Name: "[]string"}
+	GoTypeInt32Arr   = GoType{Name: "[]int32"}
+	GoTypeInt64Arr   = GoType{Name: "[]int64"}
+	GoTypeFloat64Arr = GoType{Name: "[]float64"}
+	GoTypeBoolArr    = GoType{Name: "[]bool"}
+	GoTypeUUIDArr    = GoType{Name: "[]uuid.UUID", Package: "github.com/gofrs/uuid/v5"}
 )
 
 // IsFilterable returns true if this type supports query filtering.

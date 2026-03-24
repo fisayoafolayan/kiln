@@ -368,8 +368,21 @@ func (p *Parser) resolveGoType(expr ast.Expr) ir.GoType {
 	case *ast.ArrayType:
 		if t.Len == nil {
 			inner := p.resolveGoType(t.Elt)
-			if inner.Name == "byte" {
+			switch inner.Name {
+			case "byte":
 				return ir.GoTypeByteSlice
+			case "string":
+				return ir.GoTypeStringArr
+			case "int32":
+				return ir.GoTypeInt32Arr
+			case "int64":
+				return ir.GoTypeInt64Arr
+			case "float64":
+				return ir.GoTypeFloat64Arr
+			case "bool":
+				return ir.GoTypeBoolArr
+			case "uuid.UUID":
+				return ir.GoTypeUUIDArr
 			}
 		}
 	}
