@@ -94,7 +94,7 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 	}
 
 	// Extract enum values from CHECK constraints in dbinfo files.
-	p.extractEnumsFromDBInfo(schema)
+	p.extractMetadataFromDBInfo(schema)
 
 	return schema, nil
 }
@@ -553,9 +553,14 @@ func extractINValues(expr string) []string {
 	return vals
 }
 
-// extractEnumsFromDBInfo reads the dbinfo directory (sibling to ModelsDir)
-// and populates Column.EnumValues from CHECK constraint expressions.
-func (p *Parser) extractEnumsFromDBInfo(schema *ir.Schema) {
+// varcharLenRe matches varchar(N) or char(N) to extract the length.
+var varcharLenRe = regexp.MustCompile(`(?i)(?:var)?char\((\d+)\)`)
+
+// extractMetadataFromDBInfo reads the dbinfo directory (sibling to ModelsDir)
+// and enriches schema columns with:
+//   - EnumValues from CHECK constraint expressions
+//   - MaxLength from varchar(N) / char(N) DB types
+func (p *Parser) extractMetadataFromDBInfo(schema *ir.Schema) {
 	// dbinfo sits alongside the models directory.
 	dbinfoDir := filepath.Join(filepath.Dir(p.ModelsDir), "dbinfo")
 	files, err := filepath.Glob(filepath.Join(dbinfoDir, "*.bob.go"))
@@ -563,21 +568,155 @@ func (p *Parser) extractEnumsFromDBInfo(schema *ir.Schema) {
 		return // no dbinfo — nothing to do
 	}
 
-	// Build a map of table name → column name → enum values from check expressions.
+	// Extract enum values from CHECK constraints.
 	enumMap := p.parseDBInfoChecks(files)
 
-	// Apply to schema columns (only if not already set by config).
+	// Extract column DB types for MaxLength.
+	colTypes := p.parseDBInfoColumnTypes(files)
+
+	// Apply to schema columns.
 	for _, t := range schema.Tables {
-		colEnums, ok := enumMap[t.Name]
-		if !ok {
-			continue
+		if colEnums, ok := enumMap[t.Name]; ok {
+			for _, c := range t.Columns {
+				if vals, ok := colEnums[c.Name]; ok && len(c.EnumValues) == 0 {
+					c.EnumValues = vals
+				}
+			}
 		}
-		for _, c := range t.Columns {
-			if vals, ok := colEnums[c.Name]; ok && len(c.EnumValues) == 0 {
-				c.EnumValues = vals
+		if types, ok := colTypes[t.Name]; ok {
+			for _, c := range t.Columns {
+				if dbType, ok := types[c.Name]; ok && c.MaxLength == nil {
+					if m := varcharLenRe.FindStringSubmatch(dbType); m != nil {
+						if n, err := strconv.Atoi(m[1]); err == nil {
+							c.MaxLength = &n
+						}
+					}
+				}
 			}
 		}
 	}
+}
+
+// parseDBInfoColumnTypes extracts column DB types from dbinfo files by
+// parsing the var Table literal (e.g. var Users = Table[...]{Columns: ...}).
+// Returns tableName → columnName → dbType.
+func (p *Parser) parseDBInfoColumnTypes(files []string) map[string]map[string]string {
+	result := make(map[string]map[string]string)
+	fset := token.NewFileSet()
+
+	for _, path := range files {
+		base := filepath.Base(path)
+		if base == "bob_types.bob.go" || strings.HasSuffix(base, "_test.go") {
+			continue
+		}
+
+		src, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, src, 0)
+		if err != nil {
+			continue
+		}
+
+		// Find var declarations like: var Users = Table[...]{...}
+		for _, decl := range f.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok || len(vs.Values) == 0 || len(vs.Names) == 0 {
+					continue
+				}
+				tableName := flect.Underscore(vs.Names[0].Name)
+
+				cols := extractColumnTypesFromTableLit(vs.Values[0])
+				if len(cols) > 0 {
+					result[tableName] = cols
+				}
+			}
+		}
+	}
+	return result
+}
+
+// extractColumnTypesFromTableLit extracts column Name→DBType from a Table
+// composite literal's Columns field. The structure is:
+//
+//	Table[...]{
+//	    Columns: userColumns{
+//	        Email: column{Name: "email", DBType: "varchar(255)", ...},
+//	    },
+//	}
+func extractColumnTypesFromTableLit(expr ast.Expr) map[string]string {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+
+	// Find the "Columns" field.
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Columns" {
+			continue
+		}
+		// The value is a userColumns{...} composite literal.
+		colsLit, ok := kv.Value.(*ast.CompositeLit)
+		if !ok {
+			return nil
+		}
+		result := make(map[string]string)
+		// Each element is FieldName: column{Name: "...", DBType: "...", ...}
+		for _, colElt := range colsLit.Elts {
+			colKV, ok := colElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			colLit, ok := colKV.Value.(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			name, dbType := extractColumnNameAndDBType(colLit)
+			if name != "" && dbType != "" {
+				result[name] = dbType
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+// extractColumnNameAndDBType reads Name and DBType from a column{...} literal.
+func extractColumnNameAndDBType(lit *ast.CompositeLit) (name, dbType string) {
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if bl, ok := kv.Value.(*ast.BasicLit); ok && bl.Kind == token.STRING {
+			val, err := strconv.Unquote(bl.Value)
+			if err != nil {
+				continue
+			}
+			switch key.Name {
+			case "Name":
+				name = val
+			case "DBType":
+				dbType = val
+			}
+		}
+	}
+	return
 }
 
 // parseDBInfoChecks parses dbinfo Go files and extracts check constraint

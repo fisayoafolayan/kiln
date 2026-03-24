@@ -381,6 +381,91 @@ func (c userChecks) AsSlice() []check {
 	}
 }
 
+func TestParse_ExtractsMaxLengthFromDBInfo(t *testing.T) {
+	parent := t.TempDir()
+	modelsDir := filepath.Join(parent, "models")
+	dbinfoDir := filepath.Join(parent, "dbinfo")
+	os.MkdirAll(modelsDir, 0755)
+	os.MkdirAll(dbinfoDir, 0755)
+
+	writeModel(t, modelsDir, "users.bob.go", usersModel)
+
+	// Write a dbinfo file with varchar column types.
+	dbinfoContent := `package dbinfo
+
+var Users = Table{
+	Name: "users",
+	Columns: userColumns{
+		Email: column{Name: "email", DBType: "varchar(255)"},
+		Name:  column{Name: "name", DBType: "varchar(100)"},
+		Role:  column{Name: "role", DBType: "varchar(50)"},
+		Bio:   column{Name: "bio", DBType: "text"},
+	},
+}
+
+type Table struct {
+	Name    string
+	Columns userColumns
+}
+
+type userColumns struct {
+	Email column
+	Name  column
+	Role  column
+	Bio   column
+}
+
+type column struct {
+	Name   string
+	DBType string
+}
+`
+	os.WriteFile(filepath.Join(dbinfoDir, "users.bob.go"), []byte(dbinfoContent), 0644)
+	os.WriteFile(filepath.Join(dbinfoDir, "bob_types.bob.go"), []byte("package dbinfo\n"), 0644)
+
+	p := bob.New(modelsDir, ir.DriverMySQL)
+	schema, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+
+	users := schema.TableMap["users"]
+	if users == nil {
+		t.Fatal("users table not found")
+	}
+
+	cases := []struct {
+		col     string
+		wantMax *int
+	}{
+		{"email", intPtr(255)},
+		{"name", intPtr(100)},
+		{"role", intPtr(50)},
+		{"bio", nil}, // text has no max length
+	}
+
+	for _, c := range cases {
+		col := users.ColumnMap[c.col]
+		if col == nil {
+			t.Errorf("column %q not found", c.col)
+			continue
+		}
+		if c.wantMax == nil {
+			if col.MaxLength != nil {
+				t.Errorf("col %q MaxLength = %d, want nil", c.col, *col.MaxLength)
+			}
+		} else {
+			if col.MaxLength == nil {
+				t.Errorf("col %q MaxLength = nil, want %d", c.col, *c.wantMax)
+			} else if *col.MaxLength != *c.wantMax {
+				t.Errorf("col %q MaxLength = %d, want %d", c.col, *col.MaxLength, *c.wantMax)
+			}
+		}
+	}
+}
+
+func intPtr(n int) *int { return &n }
+
 func TestParse_NoFilesError(t *testing.T) {
 	dir := t.TempDir()
 	p := bob.New(dir, ir.DriverPostgres)
