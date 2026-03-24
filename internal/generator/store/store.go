@@ -119,18 +119,20 @@ func (g *Generator) writeFile(tmpl *template.Template, data templateData, path s
 
 // templateData is the data passed to the store and mapper templates.
 type templateData struct {
-	ModulePath    string
-	ImportPath    string
-	ModelsPath    string
-	OutputPkg     string
-	SMImport      string
-	BobPkg        string
-	DialectImport string
-	NeedsClientID bool // true for MySQL/SQLite which lack RETURNING
-	Table         *ir.Table
-	Override      config.TableOverride
-	WritableCols  []*ir.Column
-	VisibleCols   []*ir.Column
+	ModulePath     string
+	ImportPath     string
+	ModelsPath     string
+	OutputPkg      string
+	SMImport       string
+	BobPkg         string
+	DialectImport  string
+	NeedsClientID  bool // true for MySQL/SQLite which lack RETURNING
+	Table          *ir.Table
+	Override       config.TableOverride
+	WritableCols   []*ir.Column
+	VisibleCols    []*ir.Column
+	FilterableCols []*ir.Column
+	SortableCols   []*ir.Column
 }
 
 func (g *Generator) templateData(t *ir.Table) templateData {
@@ -139,7 +141,7 @@ func (g *Generator) templateData(t *ir.Table) templateData {
 	modelsDir := strings.TrimPrefix(filepath.ToSlash(g.opts.Config.Bob.ModelsDir), "./")
 	modelsPath := g.opts.ModulePath + "/" + modelsDir
 
-	var writable, visible []*ir.Column
+	var writable, visible, filterable, sortable []*ir.Column
 	for _, c := range t.Columns {
 		if !override.IsFieldHidden(c.Name) {
 			visible = append(visible, c)
@@ -147,21 +149,29 @@ func (g *Generator) templateData(t *ir.Table) templateData {
 		if !c.IsReadOnly() && !override.IsFieldHidden(c.Name) && !override.IsFieldReadonly(c.Name) {
 			writable = append(writable, c)
 		}
+		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() {
+			filterable = append(filterable, c)
+		}
+		if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() {
+			sortable = append(sortable, c)
+		}
 	}
 
 	return templateData{
-		ModulePath:    g.opts.ModulePath,
-		ImportPath:    g.opts.ImportPath,
-		ModelsPath:    modelsPath,
-		OutputPkg:     g.opts.Config.Output.Package,
-		SMImport:      g.opts.Dialect.SMImport,
-		BobPkg:        g.opts.Dialect.BobPkg,
-		DialectImport: g.opts.Dialect.DialectImport,
-		NeedsClientID: g.opts.Config.Database.Driver != "postgres",
-		Table:         t,
-		Override:      override,
-		WritableCols:  writable,
-		VisibleCols:   visible,
+		ModulePath:     g.opts.ModulePath,
+		ImportPath:     g.opts.ImportPath,
+		ModelsPath:     modelsPath,
+		OutputPkg:      g.opts.Config.Output.Package,
+		SMImport:       g.opts.Dialect.SMImport,
+		BobPkg:         g.opts.Dialect.BobPkg,
+		DialectImport:  g.opts.Dialect.DialectImport,
+		NeedsClientID:  g.opts.Config.Database.Driver != "postgres",
+		Table:          t,
+		Override:       override,
+		WritableCols:   writable,
+		VisibleCols:    visible,
+		FilterableCols: filterable,
+		SortableCols:   sortable,
 	}
 }
 
@@ -169,6 +179,9 @@ func funcMap() template.FuncMap {
 	return template.FuncMap{
 		"isOperationEnabled": func(op string, o config.TableOverride) bool {
 			return !o.IsOperationDisabled(op)
+		},
+		"needsRangeOps": func(gt ir.GoType) bool {
+			return gt.SupportsRangeOps()
 		},
 		"hasNullableWritable": func(cols []*ir.Column) bool {
 			for _, c := range cols {
@@ -199,6 +212,7 @@ import (
 	{{end}}{{if .NeedsClientID}}"github.com/google/uuid"
 	{{end}}"github.com/stephenafamo/bob"
 	"{{.DialectImport}}"
+	"{{.DialectImport}}/dialect"
 	"{{.SMImport}}"
 	"{{.ModelsPath}}"
 	"{{.ImportPath}}/store/mappers"
@@ -229,18 +243,66 @@ func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName
 {{end}}
 
 {{if isOperationEnabled "list" .Override}}
-// List retrieves a paginated list of {{.Table.GoNamePlural}}.
-func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int) ([]types.{{.Table.GoName}}, int, error) {
+// {{.Table.GoName}}ListFilter holds optional filter and sort parameters.
+type {{.Table.GoName}}ListFilter struct {
+{{range .FilterableCols}}	{{.GoName}}    *{{.GoType.Name}}
+	{{.GoName}}Neq *{{.GoType.Name}}
+{{if needsRangeOps .GoType}}	{{.GoName}}Gt  *{{.GoType.Name}}
+	{{.GoName}}Gte *{{.GoType.Name}}
+	{{.GoName}}Lt  *{{.GoType.Name}}
+	{{.GoName}}Lte *{{.GoType.Name}}
+{{end}}{{end}}	SortBy   string
+	SortDesc bool
+}
+
+// List retrieves a paginated, filtered list of {{.Table.GoNamePlural}}.
+func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, filter {{.Table.GoName}}ListFilter) ([]types.{{.Table.GoName}}, int, error) {
 	if page < 1 { page = 1 }
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
-	rows, err := models.{{.Table.GoNamePlural}}.Query(
+
+	// Build WHERE clauses from filter.
+	var whereMods []bob.Mod[*dialect.SelectQuery]
+{{range .FilterableCols}}	if filter.{{.GoName}} != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.EQ({{$.BobPkg}}.Arg(*filter.{{.GoName}}))))
+	}
+	if filter.{{.GoName}}Neq != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.NE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Neq))))
+	}
+{{if needsRangeOps .GoType}}	if filter.{{.GoName}}Gt != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gt))))
+	}
+	if filter.{{.GoName}}Gte != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gte))))
+	}
+	if filter.{{.GoName}}Lt != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lt))))
+	}
+	if filter.{{.GoName}}Lte != nil {
+		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lte))))
+	}
+{{end}}{{end}}
+	// Build query mods: filters + pagination.
+	queryMods := append(whereMods,
 		sm.Limit(int64(pageSize)),
 		sm.Offset(int64((page-1)*pageSize)),
-	).All(ctx, s.db)
+	)
+
+	// Sorting.
+{{if .SortableCols}}	switch filter.SortBy {
+{{range .SortableCols}}	case "{{.Name}}":
+		if filter.SortDesc {
+			queryMods = append(queryMods, sm.OrderBy(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Desc())
+		} else {
+			queryMods = append(queryMods, sm.OrderBy(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Asc())
+		}
+{{end}}	}
+{{end}}
+	rows, err := models.{{.Table.GoNamePlural}}.Query(queryMods...).All(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{.Table.Name}}.List: %w", err)
 	}
-	count, err := models.{{.Table.GoNamePlural}}.Query().Count(ctx, s.db)
+	// Count uses only WHERE clauses, not pagination/sort.
+	count, err := models.{{.Table.GoNamePlural}}.Query(whereMods...).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{.Table.Name}}.List count: %w", err)
 	}

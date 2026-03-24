@@ -71,7 +71,7 @@ CREATE TABLE posts (
 
 Run `kiln generate` and you immediately get:
 
-- `GET /api/v1/users` - list users with pagination
+- `GET /api/v1/users` - list users with pagination, filtering & sorting
 - `POST /api/v1/users` - create a user with validation
 - `GET /api/v1/users/{id}` - get a user by ID
 - `PATCH /api/v1/users/{id}` - update a user
@@ -330,7 +330,43 @@ overrides:
       - updated_at
     disable:                    # disable specific operations: create|update|delete|list|get
       - delete
+    filterable_fields:          # allowlist for query filters; empty = all columns
+      - email
+      - role
+      - created_at
+    sortable_fields:            # allowlist for sorting; empty = all columns
+      - created_at
+      - name
+    # disable_filters: true     # opt-out of filtering entirely
+    # disable_sorting: true     # opt-out of sorting entirely
 ```
+
+### Filtering & Sorting
+
+List endpoints support filtering via query parameters and sorting via the `sort` parameter:
+
+```bash
+# Filter by exact match
+GET /api/v1/users?role=admin
+
+# Filter with operators
+GET /api/v1/users?created_at[gte]=2024-01-01T00:00:00Z&created_at[lt]=2025-01-01T00:00:00Z
+
+# Sort ascending
+GET /api/v1/users?sort=created_at
+
+# Sort descending (prefix with -)
+GET /api/v1/users?sort=-created_at
+
+# Combine filters, sorting, and pagination
+GET /api/v1/users?role=admin&sort=-created_at&page=2&page_size=10
+```
+
+Supported operators: `eq` (default), `neq`, `gt`, `gte`, `lt`, `lte`.
+Range operators (`gt/gte/lt/lte`) are available for numeric and timestamp columns.
+
+By default, all non-hidden columns are filterable and sortable.
+Use `filterable_fields` / `sortable_fields` in overrides to restrict which columns are exposed.
 
 ---
 
@@ -402,7 +438,7 @@ When adding a new feature:
 - [x] go-playground/validator integration
 - [x] Bob version compatibility checking
 - [ ] chi / gin framework support
-- [ ] Filtering & pagination config
+- [x] Filtering, sorting & pagination
 - [x] Authentication middleware (JWT and API key)
 - [ ] Checksum-based regeneration safety
 

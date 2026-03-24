@@ -132,13 +132,19 @@ type TestsConfig struct {
 
 // TableOverride holds per-table customisations.
 type TableOverride struct {
-	Endpoint       string   `yaml:"endpoint"`        // override the URL path segment
-	ReadonlyFields []string `yaml:"readonly_fields"` // excluded from Create/Update
-	HiddenFields   []string `yaml:"hidden_fields"`   // excluded from all responses
-	Disable        []string `yaml:"disable"`         // operations to disable: create|update|delete|list|get
-	readonlySet    map[string]bool
-	hiddenSet      map[string]bool
-	disableSet     map[string]bool
+	Endpoint         string   `yaml:"endpoint"`          // override the URL path segment
+	ReadonlyFields   []string `yaml:"readonly_fields"`   // excluded from Create/Update
+	HiddenFields     []string `yaml:"hidden_fields"`     // excluded from all responses
+	Disable          []string `yaml:"disable"`           // operations to disable: create|update|delete|list|get
+	FilterableFields []string `yaml:"filterable_fields"` // allowlist; empty = all non-hidden columns
+	SortableFields   []string `yaml:"sortable_fields"`   // allowlist; empty = all non-hidden columns
+	DisableFilters   bool     `yaml:"disable_filters"`   // opt-out of filtering entirely
+	DisableSorting   bool     `yaml:"disable_sorting"`   // opt-out of sorting entirely
+	readonlySet      map[string]bool
+	hiddenSet        map[string]bool
+	disableSet       map[string]bool
+	filterableSet    map[string]bool
+	sortableSet      map[string]bool
 }
 
 // IsOperationDisabled returns true if the given operation is disabled
@@ -156,6 +162,30 @@ func (o TableOverride) IsFieldHidden(field string) bool {
 // Create and Update request structs.
 func (o TableOverride) IsFieldReadonly(field string) bool {
 	return o.readonlySet[field]
+}
+
+// IsFieldFilterable returns true if the column can be used as a query filter.
+// If FilterableFields is empty and DisableFilters is false, all non-hidden columns are filterable.
+func (o TableOverride) IsFieldFilterable(field string) bool {
+	if o.DisableFilters {
+		return false
+	}
+	if len(o.filterableSet) > 0 {
+		return o.filterableSet[field]
+	}
+	return !o.IsFieldHidden(field)
+}
+
+// IsFieldSortable returns true if the column can be used for sorting.
+// If SortableFields is empty and DisableSorting is false, all non-hidden columns are sortable.
+func (o TableOverride) IsFieldSortable(field string) bool {
+	if o.DisableSorting {
+		return false
+	}
+	if len(o.sortableSet) > 0 {
+		return o.sortableSet[field]
+	}
+	return !o.IsFieldHidden(field)
 }
 
 // Load reads and validates a kiln.yaml file at the given path.
@@ -235,6 +265,8 @@ func (c *Config) buildLookups() {
 		for _, d := range o.Disable {
 			o.disableSet[strings.ToLower(d)] = true
 		}
+		o.filterableSet = toSet(o.FilterableFields)
+		o.sortableSet = toSet(o.SortableFields)
 		c.Overrides[name] = o
 	}
 }

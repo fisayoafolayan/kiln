@@ -175,6 +175,24 @@ var (
 	GoTypeJSON      = GoType{Name: "json.RawMessage", Package: "encoding/json"}
 )
 
+// IsFilterable returns true if this type supports query filtering.
+func (g GoType) IsFilterable() bool {
+	switch g.Name {
+	case "string", "uuid.UUID", "int32", "int64", "float64", "bool", "time.Time":
+		return true
+	}
+	return false
+}
+
+// SupportsRangeOps returns true if this type supports gt/gte/lt/lte operators.
+func (g GoType) SupportsRangeOps() bool {
+	switch g.Name {
+	case "int32", "int64", "float64", "time.Time":
+		return true
+	}
+	return false
+}
+
 // NullableOf returns a pointer variant of the given GoType.
 func NullableOf(t GoType) GoType {
 	t.IsPtr = true

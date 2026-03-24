@@ -82,8 +82,10 @@ type tableData struct {
 	Override config.TableOverride
 	Fields   []fieldData
 	// Writable fields for request body schemas
-	CreateFields []fieldData
-	UpdateFields []fieldData
+	CreateFields  []fieldData
+	UpdateFields  []fieldData
+	FilterFields  []fieldData // filterable columns with OpenAPI type info
+	SortableNames []string    // sortable column JSON names
 	// Nested routes from FK relationships
 	NestedRoutes []nestedRoute
 }
@@ -146,6 +148,15 @@ func (g *Generator) templateData() templateData {
 				updateFD := fd
 				updateFD.Required = false // all fields optional on update
 				td.UpdateFields = append(td.UpdateFields, updateFD)
+			}
+		}
+
+		for _, c := range t.Columns {
+			if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() {
+				td.FilterFields = append(td.FilterFields, toFieldData(c))
+			}
+			if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() {
+				td.SortableNames = append(td.SortableNames, c.JSONName())
 			}
 		}
 
@@ -217,6 +228,13 @@ func funcMap() template.FuncMap {
 		"isLast": func(i, total int) bool {
 			return i == total-1
 		},
+		"needsRangeOps": func(f fieldData) bool {
+			switch f.OAPIType {
+			case "integer", "number":
+				return true
+			}
+			return f.OAPIFormat == "date-time"
+		},
 	}
 }
 
@@ -260,7 +278,31 @@ paths:
         - name: page_size
           in: query
           schema: { type: integer, default: 20, maximum: 100 }
-      responses:
+{{range .FilterFields}}        - name: {{.JSONName}}
+          in: query
+          description: "Filter by {{.JSONName}} (exact match)"
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+        - name: {{.JSONName}}[neq]
+          in: query
+          description: "Filter by {{.JSONName}} (not equal)"
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+{{if needsRangeOps .}}        - name: {{.JSONName}}[gt]
+          in: query
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+        - name: {{.JSONName}}[gte]
+          in: query
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+        - name: {{.JSONName}}[lt]
+          in: query
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+        - name: {{.JSONName}}[lte]
+          in: query
+          schema: { type: {{.OAPIType}}{{if hasFormat .OAPIFormat}}, format: {{.OAPIFormat}}{{end}} }
+{{end}}{{end}}{{if .SortableNames}}        - name: sort
+          in: query
+          description: "Sort by field. Prefix with - for descending."
+          schema: { type: string, enum: [{{range $i, $n := .SortableNames}}{{if $i}}, {{end}}{{$n}}, -{{$n}}{{end}}] }
+{{end}}      responses:
         "200":
           description: OK
           content:

@@ -105,23 +105,38 @@ func (g *Generator) writeHelpers(outDir string) (string, bool, error) {
 
 // templateData is the data passed to the handler template.
 type templateData struct {
-	ModulePath  string
-	ImportPath  string
-	OutputPkg   string
-	Table       *ir.Table
-	Override    config.TableOverride
-	ForeignKeys []*ir.ForeignKey // all FK relationships for this table
+	ModulePath     string
+	ImportPath     string
+	OutputPkg      string
+	Table          *ir.Table
+	Override       config.TableOverride
+	ForeignKeys    []*ir.ForeignKey // all FK relationships for this table
+	FilterableCols []*ir.Column
+	SortableCols   []*ir.Column
 }
 
 func (g *Generator) templateData(t *ir.Table) templateData {
 	override := g.opts.Config.OverrideFor(t.Name)
+
+	var filterable, sortable []*ir.Column
+	for _, c := range t.Columns {
+		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() {
+			filterable = append(filterable, c)
+		}
+		if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() {
+			sortable = append(sortable, c)
+		}
+	}
+
 	return templateData{
-		ModulePath:  g.opts.ModulePath,
-		ImportPath:  g.opts.ImportPath,
-		OutputPkg:   g.opts.Config.Output.Package,
-		Table:       t,
-		Override:    override,
-		ForeignKeys: t.ForeignKeys,
+		ModulePath:     g.opts.ModulePath,
+		ImportPath:     g.opts.ImportPath,
+		OutputPkg:      g.opts.Config.Output.Package,
+		Table:          t,
+		Override:       override,
+		ForeignKeys:    t.ForeignKeys,
+		FilterableCols: filterable,
+		SortableCols:   sortable,
 	}
 }
 
@@ -132,6 +147,31 @@ func funcMap() template.FuncMap {
 		},
 		"pkIsStringLike": func(t *ir.Table) bool {
 			return t.PKIsStringLike()
+		},
+		"needsRangeOps": func(gt ir.GoType) bool {
+			return gt.SupportsRangeOps()
+		},
+		// filterParseSnippet returns the Go code to parse a query param value
+		// into a pointer of the column's Go type and assign it to a target variable.
+		"filterParseSnippet": func(c *ir.Column, target string) string {
+			switch c.GoType.Name {
+			case "string":
+				return "{ val := v; " + target + " = &val }"
+			case "uuid.UUID":
+				return "if parsed, err := uuid.FromString(v); err == nil { " + target + " = &parsed }"
+			case "int32":
+				return "if n, err := strconv.ParseInt(v, 10, 32); err == nil { val := int32(n); " + target + " = &val }"
+			case "int64":
+				return "if n, err := strconv.ParseInt(v, 10, 64); err == nil { " + target + " = &n }"
+			case "float64":
+				return "if n, err := strconv.ParseFloat(v, 64); err == nil { " + target + " = &n }"
+			case "bool":
+				return "if b, err := strconv.ParseBool(v); err == nil { " + target + " = &b }"
+			case "time.Time":
+				return "if t, err := time.Parse(time.RFC3339, v); err == nil { " + target + " = &t }"
+			default:
+				return "// unsupported filter type: " + c.GoType.Name
+			}
 		},
 	}
 }
@@ -150,15 +190,18 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-{{if not (pkIsStringLike .Table)}}	"strconv"
+{{if or .FilterableCols (not (pkIsStringLike .Table))}}	"strconv"
+{{end}}{{if .SortableCols}}	"strings"
+{{end}}{{if .FilterableCols}}	"time"
 {{end}}
+	"{{.ImportPath}}/store"
 	"{{.ImportPath}}/types"
 )
 
 // {{.Table.GoName}}Store is the interface the handler depends on.
 type {{.Table.GoName}}Store interface {
 {{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id {{.Table.PKTypeName}}) (*types.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int) ([]types.{{.Table.GoName}}, int, error)
+{{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int, filter store.{{.Table.GoName}}ListFilter) ([]types.{{.Table.GoName}}, int, error)
 {{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id {{.Table.PKTypeName}}) error
@@ -205,7 +248,38 @@ func (h *{{.Table.GoName}}Handler) Get(w http.ResponseWriter, r *http.Request) {
 // List handles GET /{{.Table.Endpoint}}
 func (h *{{.Table.GoName}}Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, pageSize := parsePagination(r)
-	rows, total, err := h.store.List(r.Context(), page, pageSize)
+	q := r.URL.Query()
+	filter := store.{{.Table.GoName}}ListFilter{}
+
+{{range .FilterableCols}}	if v := q.Get("{{.Name}}"); v != "" {
+		{{filterParseSnippet . (printf "filter.%s" .GoName)}}
+	}
+	if v := q.Get("{{.Name}}[neq]"); v != "" {
+		{{filterParseSnippet . (printf "filter.%sNeq" .GoName)}}
+	}
+{{if needsRangeOps .GoType}}	if v := q.Get("{{.Name}}[gt]"); v != "" {
+		{{filterParseSnippet . (printf "filter.%sGt" .GoName)}}
+	}
+	if v := q.Get("{{.Name}}[gte]"); v != "" {
+		{{filterParseSnippet . (printf "filter.%sGte" .GoName)}}
+	}
+	if v := q.Get("{{.Name}}[lt]"); v != "" {
+		{{filterParseSnippet . (printf "filter.%sLt" .GoName)}}
+	}
+	if v := q.Get("{{.Name}}[lte]"); v != "" {
+		{{filterParseSnippet . (printf "filter.%sLte" .GoName)}}
+	}
+{{end}}{{end}}
+{{if .SortableCols}}	if sortParam := q.Get("sort"); sortParam != "" {
+		if strings.HasPrefix(sortParam, "-") {
+			filter.SortBy = sortParam[1:]
+			filter.SortDesc = true
+		} else {
+			filter.SortBy = sortParam
+		}
+	}
+{{end}}
+	rows, total, err := h.store.List(r.Context(), page, pageSize, filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list {{.Table.Name}}")
 		return
