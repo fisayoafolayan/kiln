@@ -6,7 +6,8 @@
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 
 > Turn your database schema into a production-ready Go API.
-> No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+> Your API never drifts from your schema. No runtime magic. No framework lock-in.
+> Just clean, idiomatic Go code you own.
 
 ## Table of Contents
 
@@ -20,7 +21,7 @@
 - [Database Support](#database-support)
 - [Brownfield Adoption](#brownfield-adoption)
   - [Write-Once Files](#write-once-files)
-  - [Schema Changes](#schema-changes)
+- [Schema Evolution](#schema-evolution)
   - [Testing Generated Code](#testing-generated-code)
 - [How It Works](#how-it-works)
 - [Why Not sqlc?](#why-not-sqlc)
@@ -41,7 +42,10 @@ You have a database schema. To expose it as an API you write:
 structs, validation, handlers, a router, an OpenAPI spec.
 All by hand. All again when your schema changes.
 
-**kiln generates all of it - from your schema. One command.**
+Then the schema drifts. A column is renamed, a constraint is added, a table
+is split. The API falls out of sync. Tests pass. Production breaks.
+
+**kiln generates all of it - from your schema. One command. Every time your schema changes, regenerate and your API stays in sync.**
 
 ---
 
@@ -275,30 +279,51 @@ func UserToType(m *dbmodels.User) *models.User {
 
 Change your schema, regenerate - your mapper is untouched.
 
-### Schema Changes
+---
 
-When your database schema changes (new column, new table, renamed field):
+## Schema Evolution
 
-1. Apply the migration to your database (using goose, atlas, golang-migrate, or raw SQL)
-2. Run `kiln generate`
+This is where kiln differs from one-time scaffolding tools. Your schema changes over time - kiln keeps your API in sync.
 
-Kiln regenerates all auto-generated files. Files you've edited are **skipped** with a warning:
+### The workflow
+
+```
+1. Change your schema (add column, rename field, add table)
+2. Migrate the database (goose, atlas, golang-migrate, raw SQL)
+3. Run: kiln generate
+4. Done. API matches the new schema.
+```
+
+### What happens on regenerate
+
+**Auto-generated files** are updated to match the new schema. Each file has an embedded checksum. If you've edited one, kiln protects your changes:
 
 ```
   ⚠ SKIPPED  generated/store/users.go (user-modified; use --force to overwrite)
   ✓ generated/models/users.go
   ✓ generated/handlers/users.go
+  ✓ generated/router.go
+  ✓ docs/openapi.yaml
 ```
 
-To see what would change without writing: `kiln diff`
+**Write-once files** (mappers, helpers, main.go) are never touched. You update those manually when needed.
 
-To force-regenerate everything: `kiln generate --force`
+### Tools for safe evolution
 
-Write-once files (mappers, helpers, main.go) are never touched - you'll need to update those manually when columns change.
+| Command | Use when |
+|---------|----------|
+| `kiln diff` | Preview what would change before writing |
+| `kiln generate` | Regenerate, skip edited files |
+| `kiln generate --force` | Overwrite everything, including edits |
+| `kiln generate --table users` | Regenerate only one table |
 
-### Testing Generated Code
+### Why this matters
 
-kiln doesn't generate tests - testing strategies are too project-specific. But the generated code is straightforward to test:
+Without kiln, a schema change means manually updating structs, handlers, validation, filters, OpenAPI spec - hoping nothing falls out of sync. With kiln, the schema is the single source of truth. Change it, regenerate, and the API is correct by construction.
+
+### Testing generated code
+
+kiln doesn't generate tests - testing strategies are too project-specific. But the generated code is designed for testability:
 
 **Handlers** depend on a store interface, not a concrete type. Mock the interface:
 
@@ -310,7 +335,7 @@ func (m *mockUserStore) Get(ctx context.Context, id uuid.UUID) (*models.User, er
 }
 ```
 
-**Store methods** are single-query functions that work against any `bob.DB`. Pass a test database connection:
+**Store methods** are single-query functions that work against any `bob.DB`:
 
 ```go
 db := bob.NewDB(testDB) // real DB or txdb for isolation
@@ -554,11 +579,12 @@ All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
 
 ## Philosophy
 
-- **Schema is truth.** Your database already describes your domain.
-- **You own the output.** Zero runtime dependency on kiln.
-- **Escape hatches everywhere.** Write-once files are yours forever.
+- **Schema is truth.** Your database already describes your domain. The API should follow it, not the other way around.
+- **Correctness over speed.** Generation is fast, but the real value is that your API never drifts from your schema. Change the schema, regenerate, done.
+- **You own the output.** Zero runtime dependency on kiln. Fork and forget.
+- **Escape hatches everywhere.** Write-once files are yours forever. Checksums protect your edits. Nothing is locked down.
 - **Idiomatic Go.** Output looks like code a senior Go dev wrote by hand.
-- **Brownfield friendly.** Adopt one layer at a time.
+- **Brownfield friendly.** Adopt one layer at a time. Start with types, add store later, add handlers when ready.
 
 ---
 

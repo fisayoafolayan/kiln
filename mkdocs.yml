@@ -49,7 +49,7 @@ nav:
     - Authentication: features/auth.md
     - Chi Router: features/chi.md
   - Guides:
-    - Schema Changes: guides/schema-changes.md
+    - Schema Evolution: guides/schema-changes.md
     - Testing: guides/testing.md
     - Brownfield Adoption: guides/brownfield.md
   - Reference:

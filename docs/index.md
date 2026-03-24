@@ -2,7 +2,7 @@
 
 **Turn your database schema into a production-ready Go API. One command.**
 
-No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+Your API never drifts from your schema. No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
 
 ## The Problem
 
@@ -53,8 +53,21 @@ All with zero runtime dependency on kiln. You own the output.
 
 kiln is the only tool that goes from database schema to **runnable REST API** in one command, where the output is plain Go you can fork and forget.
 
+## Schema Evolution
+
+This is where kiln differs from one-time scaffolding. Your schema changes over time — kiln keeps your API in sync:
+
+```
+1. Change your schema
+2. Run: kiln generate
+3. Done. API matches the new schema.
+```
+
+Edited files are protected by checksums. Write-once files are never touched. See [Schema Evolution](guides/schema-changes.md) for the full workflow.
+
 ## Next Steps
 
 - [Getting Started](getting-started.md) - install and generate your first API
 - [Configuration](configuration.md) - customize what kiln generates
+- [Schema Evolution](guides/schema-changes.md) - how kiln handles schema changes
 - [Example Project](https://github.com/fisayoafolayan/kiln/tree/main/examples/blog-api) - a complete blog API you can clone and run

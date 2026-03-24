@@ -355,8 +355,7 @@ func (h *{{.Table.GoName}}Handler) List(w http.ResponseWriter, r *http.Request) 
 // Create handles POST /{{.Table.Endpoint}}
 func (h *{{.Table.GoName}}Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req models.Create{{.Table.GoName}}Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if !validateRequest(w, req) {
@@ -398,8 +397,7 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 		return
 	}{{end}}
 	var req models.Update{{.Table.GoName}}Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if !validateRequest(w, req) {
@@ -550,6 +548,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// maxRequestBodySize is the maximum size of a request body (1MB).
+// Adjust this to your needs.
+const maxRequestBodySize = 1 << 20
+
+// decodeJSON reads and decodes a JSON request body with a size limit.
+// Returns false and writes an error response if decoding fails.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+		}
+		return false
+	}
+	return true
 }
 
 // handleStoreError maps common store/database errors to HTTP status codes.
