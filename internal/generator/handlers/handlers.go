@@ -565,25 +565,26 @@ func handleStoreError(w http.ResponseWriter, err error, entity, operation string
 		return
 	}
 
-	// Unique constraint violation — detect across database drivers.
-	// Postgres: "duplicate key value violates unique constraint"
-	// MySQL:    "Error 1062: Duplicate entry"
-	// SQLite:   "UNIQUE constraint failed"
-	errMsg := err.Error()
-	if strings.Contains(errMsg, "duplicate") ||
-		strings.Contains(errMsg, "Duplicate") ||
-		strings.Contains(errMsg, "UNIQUE constraint") {
+	// Constraint violations - detect via error codes (locale-independent).
+	// Drivers expose codes through interfaces; we check those first,
+	// then fall back to string matching for compatibility.
+	code := dbErrorCode(err)
+	switch {
+	case code == "23505" || code == "1062": // Postgres / MySQL unique violation
 		writeError(w, http.StatusConflict, entity+" already exists")
+		return
+	case code == "23503" || code == "1452": // Postgres / MySQL FK violation
+		writeError(w, http.StatusUnprocessableEntity, "referenced "+entity+" does not exist")
 		return
 	}
 
-	// Foreign key violation — the referenced record doesn't exist.
-	// Postgres: "violates foreign key constraint"
-	// MySQL:    "Error 1452: Cannot add or update a child row"
-	// SQLite:   "FOREIGN KEY constraint failed"
-	if strings.Contains(errMsg, "foreign key") ||
-		strings.Contains(errMsg, "FOREIGN KEY") ||
-		strings.Contains(errMsg, "Cannot add or update a child row") {
+	// Fallback: string matching for SQLite and untyped errors.
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "UNIQUE constraint") {
+		writeError(w, http.StatusConflict, entity+" already exists")
+		return
+	}
+	if strings.Contains(errMsg, "FOREIGN KEY constraint") {
 		writeError(w, http.StatusUnprocessableEntity, "referenced "+entity+" does not exist")
 		return
 	}
@@ -591,6 +592,29 @@ func handleStoreError(w http.ResponseWriter, err error, entity, operation string
 	// Default: internal server error. Log the actual error for debugging.
 	log.Printf("ERROR %s.%s: %v", entity, operation, err)
 	writeError(w, http.StatusInternalServerError, "failed to "+operation+" "+entity)
+}
+
+// dbErrorCode extracts a database error code without importing driver packages.
+// Postgres (pgx): implements SQLState() string → "23505", "23503", etc.
+// MySQL (go-sql-driver): implements Number() uint16 → 1062, 1452, etc.
+func dbErrorCode(err error) string {
+	// Postgres: pgconn.PgError has Code/SQLState method.
+	type pgErr interface{ SQLState() string }
+	var pg pgErr
+	if errors.As(err, &pg) {
+		return pg.SQLState()
+	}
+	// MySQL: *mysql.MySQLError has Number field.
+	type myErr interface{ Error() string; Is(error) bool }
+	// MySQL driver doesn't have a clean code accessor, so extract from Error() format.
+	// Format: "Error 1062 (23000): Duplicate entry ..."
+	s := err.Error()
+	if len(s) > 6 && s[:6] == "Error " {
+		if idx := strings.IndexByte(s[6:], ' '); idx > 0 {
+			return s[6 : 6+idx]
+		}
+	}
+	return ""
 }
 
 func parsePagination(r *http.Request) (page, pageSize int) {
