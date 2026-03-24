@@ -1,5 +1,7 @@
 # Getting Started
 
+From database schema to running API in under 5 minutes.
+
 ## Prerequisites
 
 - Go 1.22+

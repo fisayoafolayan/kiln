@@ -1,16 +1,22 @@
 # kiln
 
-**Turn your database schema into a production-ready Go API. One command.**
+**Turn your database schema into a production-ready Go API.**
 
-Your API never drifts from your schema. No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
+Eliminate schema drift — your API always matches your schema. No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
 
 ## The Problem
 
-You have a database schema. To expose it as an API you write:
-structs, validation, handlers, a router, an OpenAPI spec.
-All by hand. All again when your schema changes.
+Then the schema changes. A column is renamed. A constraint is added.
+Your API doesn't match anymore. Tests pass. CI is green. Production breaks.
 
-**kiln generates all of it - from your schema. One command.**
+Because your API no longer matches your schema. This is **schema drift**.
+
+kiln eliminates it. One command generates your entire API layer from
+the database schema. Schema changes? Regenerate. Your API is correct
+by construction — not by convention or tests.
+
+Think of kiln like a compiler: the schema is your source, `kiln generate`
+is the compile step, and the output is a working API. Change the schema, recompile.
 
 ## Quick Example
 
@@ -52,6 +58,14 @@ All with zero runtime dependency on kiln. You own the output.
 | Runtime dependency | None | ent runtime | None |
 
 kiln is the only tool that goes from database schema to **runnable REST API** in one command, where the output is plain Go you can fork and forget.
+
+### What kiln is not
+
+- **Not an ORM** — no runtime query layer
+- **Not a framework** — no runtime control, no hidden magic
+- **Not one-shot scaffolding** — regenerate safely as your schema evolves
+
+kiln is a compiler for APIs. Schema in, Go code out.
 
 ## Schema Evolution
 
