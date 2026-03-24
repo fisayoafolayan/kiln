@@ -61,7 +61,7 @@ type APIConfig struct {
 
 type BobConfig struct {
 	Enabled   *bool  `yaml:"enabled"`    // default: true
-	ModelsDir string `yaml:"models_dir"` // default: ./generated/models
+	ModelsDir string `yaml:"models_dir"` // default: ./models
 }
 
 // IsEnabled returns whether bob schema introspection is enabled.
@@ -83,7 +83,7 @@ type TablesConfig struct {
 // GenerateConfig controls which layers are generated.
 // Defaults to all true - opt individual layers out for brownfield adoption.
 type GenerateConfig struct {
-	Types    *bool `yaml:"types"`
+	Models   *bool `yaml:"models"`
 	Store    *bool `yaml:"store"`
 	Handlers *bool `yaml:"handlers"`
 	Router   *bool `yaml:"router"`
@@ -95,8 +95,8 @@ type GenerateConfig struct {
 func (g GenerateConfig) IsEnabled(layer string) bool {
 	var b *bool
 	switch layer {
-	case "types":
-		b = g.Types
+	case "models":
+		b = g.Models
 	case "store":
 		b = g.Store
 	case "handlers":
@@ -237,7 +237,7 @@ func (c *Config) applyDefaults() {
 		c.API.Framework = "stdlib"
 	}
 	if c.Bob.ModelsDir == "" {
-		c.Bob.ModelsDir = "./generated/models"
+		c.Bob.ModelsDir = "./models"
 	}
 	if c.Auth.Header == "" {
 		c.Auth.Header = "Authorization"

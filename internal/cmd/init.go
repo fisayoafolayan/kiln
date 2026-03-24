@@ -29,7 +29,7 @@ func initCmd() *cobra.Command {
 └─────────────────────────────────────────┘
 
 kiln reads your database schema and generates a complete,
-idiomatic Go API - types, store, handlers, router, and OpenAPI spec.
+idiomatic Go API - models, store, handlers, router, and OpenAPI spec.
 
 Under the hood, kiln uses bob (github.com/stephenafamo/bob) to
 introspect your database. You don't need to know how bob works -
@@ -82,7 +82,7 @@ bob:
   models_dir: %q
 
 generate:
-  types: true
+  models: true
   store: true
   handlers: true
   router: true

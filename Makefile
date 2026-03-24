@@ -260,14 +260,14 @@ _e2e:
 		echo '  enabled: true'; \
 		echo '  models_dir: "./models"'; \
 		echo 'generate:'; \
-		echo '  types: true'; \
+		echo '  models: true'; \
 		echo '  store: true'; \
 		echo '  handlers: true'; \
 		echo '  router: true'; \
 		echo '  openapi: true'; \
 		echo 'openapi:'; \
 		echo '  enabled: true'; \
-		echo '  output: "./generated/openapi.yaml"'; \
+		echo '  output: "./docs/openapi.yaml"'; \
 		echo '  title: "Blog API ($(DRIVER))"'; \
 		echo '  version: "1.0.0"'; \
 		echo 'tables:'; \

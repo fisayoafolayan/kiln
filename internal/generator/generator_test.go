@@ -131,8 +131,8 @@ func TestGeneratorCreatesExpectedFiles(t *testing.T) {
 	}
 
 	expected := []string{
-		"types/users.go",
-		"types/posts.go",
+		"models/users.go",
+		"models/posts.go",
 		"store/users.go",
 		"store/posts.go",
 		"store/mappers/users.go",
@@ -166,9 +166,9 @@ func TestTypesFileContainsExpectedTypes(t *testing.T) {
 		t.Fatalf("generator.Run() failed: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(outDir, "types/users.go"))
+	content, err := os.ReadFile(filepath.Join(outDir, "models/users.go"))
 	if err != nil {
-		t.Fatalf("reading types/users.go: %v", err)
+		t.Fatalf("reading models/users.go: %v", err)
 	}
 	src := string(content)
 
@@ -189,10 +189,10 @@ func TestTypesFileContainsExpectedTypes(t *testing.T) {
 	for _, c := range checks {
 		found := strings.Contains(src, c.substr)
 		if c.present && !found {
-			t.Errorf("%s: expected %q in types/users.go but not found", c.desc, c.substr)
+			t.Errorf("%s: expected %q in models/users.go but not found", c.desc, c.substr)
 		}
 		if !c.present && found {
-			t.Errorf("%s: expected %q to be absent from types/users.go but was found", c.desc, c.substr)
+			t.Errorf("%s: expected %q to be absent from models/users.go but was found", c.desc, c.substr)
 		}
 	}
 }
@@ -318,15 +318,15 @@ func TestChecksumIsEmbedded(t *testing.T) {
 	}
 
 	// Check a generated Go file has a real checksum, not the placeholder.
-	content, err := os.ReadFile(filepath.Join(outDir, "types/users.go"))
+	content, err := os.ReadFile(filepath.Join(outDir, "models/users.go"))
 	if err != nil {
-		t.Fatalf("reading types/users.go: %v", err)
+		t.Fatalf("reading models/users.go: %v", err)
 	}
 	if strings.Contains(string(content), "__CHECKSUM__") {
-		t.Error("types/users.go still contains __CHECKSUM__ placeholder")
+		t.Error("models/users.go still contains __CHECKSUM__ placeholder")
 	}
 	if !strings.Contains(string(content), "kiln:checksum=") {
-		t.Error("types/users.go missing checksum marker")
+		t.Error("models/users.go missing checksum marker")
 	}
 }
 
@@ -341,10 +341,10 @@ func TestUserEditedFileIsSkipped(t *testing.T) {
 		t.Fatalf("first Run() failed: %v", err)
 	}
 
-	typesPath := filepath.Join(outDir, "types/users.go")
+	typesPath := filepath.Join(outDir, "models/users.go")
 	original, err := os.ReadFile(typesPath)
 	if err != nil {
-		t.Fatalf("reading types/users.go: %v", err)
+		t.Fatalf("reading models/users.go: %v", err)
 	}
 
 	// Simulate a user edit.
@@ -379,10 +379,10 @@ func TestForceOverwritesEditedFile(t *testing.T) {
 		t.Fatalf("first Run() failed: %v", err)
 	}
 
-	typesPath := filepath.Join(outDir, "types/users.go")
+	typesPath := filepath.Join(outDir, "models/users.go")
 	original, err := os.ReadFile(typesPath)
 	if err != nil {
-		t.Fatalf("reading types/users.go: %v", err)
+		t.Fatalf("reading models/users.go: %v", err)
 	}
 
 	// Simulate a user edit.
@@ -418,10 +418,10 @@ func TestUnmodifiedFileIsRegenerated(t *testing.T) {
 		t.Fatalf("first Run() failed: %v", err)
 	}
 
-	typesPath := filepath.Join(outDir, "types/users.go")
+	typesPath := filepath.Join(outDir, "models/users.go")
 	original, err := os.ReadFile(typesPath)
 	if err != nil {
-		t.Fatalf("reading types/users.go: %v", err)
+		t.Fatalf("reading models/users.go: %v", err)
 	}
 
 	// Second run without edits — file should be regenerated (content unchanged).

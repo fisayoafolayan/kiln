@@ -237,9 +237,9 @@ import (
 	"{{.DialectImport}}"
 	"{{.DialectImport}}/dialect"
 	"{{.SMImport}}"
-	"{{.ModelsPath}}"
+	dbmodels "{{.ModelsPath}}"
+	"{{.ImportPath}}/models"
 	"{{.ImportPath}}/store/mappers"
-	"{{.ImportPath}}/types"
 )
 
 // {{.Table.GoName}}Store handles database operations for {{.Table.Name}}.
@@ -254,9 +254,9 @@ func New{{.Table.GoName}}Store(db bob.DB) *{{.Table.GoName}}Store {
 
 {{if isOperationEnabled "get" .Override}}
 // Get retrieves a single {{.Table.GoName}} by primary key.
-func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName}}) (*types.{{.Table.GoName}}, error) {
-	row, err := models.{{.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName}}) (*models.{{.Table.GoName}}, error) {
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Get: %w", err)
@@ -279,29 +279,29 @@ type {{.Table.GoName}}ListFilter struct {
 }
 
 // List retrieves a paginated, filtered list of {{.Table.GoNamePlural}}.
-func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, filter {{.Table.GoName}}ListFilter) ([]types.{{.Table.GoName}}, int, error) {
+func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, filter {{.Table.GoName}}ListFilter) ([]models.{{.Table.GoName}}, int, error) {
 	if page < 1 { page = 1 }
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
 
 	// Build WHERE clauses from filter.
 	var whereMods []bob.Mod[*dialect.SelectQuery]
 {{range .FilterableCols}}	if filter.{{.GoName}} != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.EQ({{$.BobPkg}}.Arg(*filter.{{.GoName}}))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.EQ({{$.BobPkg}}.Arg(*filter.{{.GoName}}))))
 	}
 	if filter.{{.GoName}}Neq != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.NE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Neq))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.NE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Neq))))
 	}
 {{if needsRangeOps .GoType}}	if filter.{{.GoName}}Gt != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gt))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gt))))
 	}
 	if filter.{{.GoName}}Gte != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gte))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.GTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Gte))))
 	}
 	if filter.{{.GoName}}Lt != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lt))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LT({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lt))))
 	}
 	if filter.{{.GoName}}Lte != nil {
-		whereMods = append(whereMods, sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lte))))
+		whereMods = append(whereMods, sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}.LTE({{$.BobPkg}}.Arg(*filter.{{.GoName}}Lte))))
 	}
 {{end}}{{end}}
 	// Build query mods: filters + pagination.
@@ -314,18 +314,18 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, f
 {{if .SortableCols}}	switch filter.SortBy {
 {{range .SortableCols}}	case "{{.Name}}":
 		if filter.SortDesc {
-			queryMods = append(queryMods, sm.OrderBy(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Desc())
+			queryMods = append(queryMods, sm.OrderBy(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Desc())
 		} else {
-			queryMods = append(queryMods, sm.OrderBy(models.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Asc())
+			queryMods = append(queryMods, sm.OrderBy(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.GoName}}).Asc())
 		}
 {{end}}	}
 {{end}}
-	rows, err := models.{{.Table.GoNamePlural}}.Query(queryMods...).All(ctx, s.db)
+	rows, err := dbmodels.{{.Table.GoNamePlural}}.Query(queryMods...).All(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{.Table.Name}}.List: %w", err)
 	}
 	// Count uses only WHERE clauses, not pagination/sort.
-	count, err := models.{{.Table.GoNamePlural}}.Query(whereMods...).Count(ctx, s.db)
+	count, err := dbmodels.{{.Table.GoNamePlural}}.Query(whereMods...).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{.Table.Name}}.List count: %w", err)
 	}
@@ -335,19 +335,19 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, f
 
 {{range .Table.ForeignKeys}}
 // ListBy{{.TargetTable.GoName}} retrieves {{$.Table.GoNamePlural}} belonging to a {{.TargetTable.GoName}}.
-func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error) {
+func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]models.{{$.Table.GoName}}, int, error) {
 	if page < 1 { page = 1 }
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
-	rows, err := models.{{$.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
+	rows, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
 		sm.Limit(int64(pageSize)),
 		sm.Offset(int64((page-1)*pageSize)),
 	).All(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}}: %w", err)
 	}
-	count, err := models.{{$.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
+	count, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
 	).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}} count: %w", err)
@@ -358,32 +358,32 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 
 {{if isOperationEnabled "create" .Override}}
 // Create inserts a new {{.Table.GoName}} record.
-func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error) {
+func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
 	{{if .NeedsClientID}}// Generate ID in Go — required for MySQL/SQLite which lack RETURNING support.
 	newID := uuid.New().String()
-	setter := &models.{{.Table.GoName}}Setter{
+	setter := &dbmodels.{{.Table.GoName}}Setter{
 		{{.Table.PrimaryKey.GoName}}: omit.From(newID),
 		{{range .WritableCols}}{{if .Nullable}}{{.GoName}}: omitnull.FromPtr(req.{{.GoName}}),
 		{{else}}{{.GoName}}: omit.From(req.{{.GoName}}),
 		{{end}}{{end}}
 	}
-	_, err := models.{{.Table.GoNamePlural}}.Insert(setter).Exec(ctx, s.db)
+	_, err := dbmodels.{{.Table.GoNamePlural}}.Insert(setter).Exec(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Create: %w", err)
 	}
-	row, err := models.{{.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(newID))),
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(newID))),
 	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Create fetch: %w", err)
 	}
 	return mappers.{{.Table.GoName}}ToType(row), nil
-	{{else}}setter := &models.{{.Table.GoName}}Setter{
+	{{else}}setter := &dbmodels.{{.Table.GoName}}Setter{
 		{{range .WritableCols}}{{if .Nullable}}{{.GoName}}: omitnull.FromPtr(req.{{.GoName}}),
 		{{else}}{{.GoName}}: omit.From(req.{{.GoName}}),
 		{{end}}{{end}}
 	}
-	row, err := models.{{.Table.GoNamePlural}}.Insert(setter).One(ctx, s.db)
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Insert(setter).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Create: %w", err)
 	}
@@ -393,14 +393,14 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req types.Create{{.
 
 {{if isOperationEnabled "update" .Override}}
 // Update modifies an existing {{.Table.GoName}} record.
-func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error) {
-	row, err := models.{{.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Update find: %w", err)
 	}
-	setter := &models.{{.Table.GoName}}Setter{}
+	setter := &dbmodels.{{.Table.GoName}}Setter{}
 	{{range .WritableCols}}if req.{{.GoName}} != nil {
 		{{if .Nullable}}setter.{{.GoName}} = omitnull.FromPtr(req.{{.GoName}})
 		{{else}}setter.{{.GoName}} = omit.From(*req.{{.GoName}})
@@ -418,8 +418,8 @@ func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeN
 {{if isOperationEnabled "delete" .Override}}
 // Delete removes a {{.Table.GoName}} record by primary key.
 func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
-	row, err := models.{{.Table.GoNamePlural}}.Query(
-		sm.Where(models.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
 	if err != nil {
 		return fmt.Errorf("{{.Table.Name}}.Delete find: %w", err)
@@ -443,16 +443,16 @@ const mapperTemplate = `// Generated by kiln on first run. THIS FILE IS YOURS.
 package mappers
 
 import (
-	"{{.ModelsPath}}"
-	"{{.ImportPath}}/types"
+	dbmodels "{{.ModelsPath}}"
+	"{{.ImportPath}}/models"
 )
 
-// {{.Table.GoName}}ToType maps a bob model to a types.{{.Table.GoName}}.
-func {{.Table.GoName}}ToType(m *models.{{.Table.GoName}}) *types.{{.Table.GoName}} {
+// {{.Table.GoName}}ToType maps a bob model to a models.{{.Table.GoName}}.
+func {{.Table.GoName}}ToType(m *dbmodels.{{.Table.GoName}}) *models.{{.Table.GoName}} {
 	if m == nil {
 		return nil
 	}
-	t := &types.{{.Table.GoName}}{}
+	t := &models.{{.Table.GoName}}{}
 {{range .VisibleCols}}{{if .Nullable}}	if !m.{{.GoName}}.IsNull() {
 		v := m.{{.GoName}}.MustGet()
 		t.{{.GoName}} = &v
@@ -461,9 +461,9 @@ func {{.Table.GoName}}ToType(m *models.{{.Table.GoName}}) *types.{{.Table.GoName
 {{end}}{{end}}	return t
 }
 
-// {{.Table.GoNamePlural}}ToTypes maps a slice of bob models to a slice of types.{{.Table.GoName}}.
-func {{.Table.GoNamePlural}}ToTypes(rows []*models.{{.Table.GoName}}) []types.{{.Table.GoName}} {
-	out := make([]types.{{.Table.GoName}}, 0, len(rows))
+// {{.Table.GoNamePlural}}ToTypes maps a slice of bob models to a slice of models.{{.Table.GoName}}.
+func {{.Table.GoNamePlural}}ToTypes(rows []*dbmodels.{{.Table.GoName}}) []models.{{.Table.GoName}} {
+	out := make([]models.{{.Table.GoName}}, 0, len(rows))
 	for _, r := range rows {
 		if mapped := {{.Table.GoName}}ToType(r); mapped != nil {
 			out = append(out, *mapped)

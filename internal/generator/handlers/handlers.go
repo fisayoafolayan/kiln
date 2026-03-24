@@ -244,17 +244,17 @@ import (
 {{end}}
 {{if handlerNeedsUUID .Table .FilterableCols .ForeignKeys}}	"github.com/gofrs/uuid/v5"
 {{end}}	"{{.ImportPath}}/store"
-	"{{.ImportPath}}/types"
+	"{{.ImportPath}}/models"
 )
 
 // {{.Table.GoName}}Store is the interface the handler depends on.
 type {{.Table.GoName}}Store interface {
-{{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id {{.Table.PKTypeName}}) (*types.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int, filter store.{{.Table.GoName}}ListFilter) ([]types.{{.Table.GoName}}, int, error)
-{{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
-{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*types.{{.Table.GoName}}, error)
+{{if isOperationEnabled "get" .Override}}	Get(ctx context.Context, id {{.Table.PKTypeName}}) (*models.{{.Table.GoName}}, error)
+{{end}}{{if isOperationEnabled "list" .Override}}	List(ctx context.Context, page, pageSize int, filter store.{{.Table.GoName}}ListFilter) ([]models.{{.Table.GoName}}, int, error)
+{{end}}{{if isOperationEnabled "create" .Override}}	Create(ctx context.Context, req types.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
+{{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req types.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id {{.Table.PKTypeName}}) error
-{{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]types.{{$.Table.GoName}}, int, error)
+{{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]models.{{$.Table.GoName}}, int, error)
 {{end}}}
 
 // {{.Table.GoName}}Handler handles HTTP requests for {{.Table.Name}}.

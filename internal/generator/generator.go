@@ -101,7 +101,7 @@ type step struct {
 func (g *Generator) steps() []step {
 	cfg := g.opts.Config
 	all := []step{
-		{cfg.Generate.IsEnabled("types"), asRunnable(types.New)},
+		{cfg.Generate.IsEnabled("models"), asRunnable(types.New)},
 		{cfg.Generate.IsEnabled("store"), asRunnable(store.New)},
 		{cfg.Generate.IsEnabled("handlers"), asRunnable(handlers.New)},
 		{cfg.Generate.IsEnabled("router"), asRunnable(router.New)},

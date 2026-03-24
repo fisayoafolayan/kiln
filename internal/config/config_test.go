@@ -280,7 +280,7 @@ database:
 `)
 	cfg, _ := config.Load(path)
 
-	for _, layer := range []string{"types", "store", "handlers", "router", "openapi"} {
+	for _, layer := range []string{"models", "store", "handlers", "router", "openapi"} {
 		if !cfg.Generate.IsEnabled(layer) {
 			t.Errorf("layer %q should be enabled by default", layer)
 		}
@@ -294,7 +294,7 @@ database:
   driver: postgres
   dsn: "postgres://localhost/test"
 generate:
-  types: true
+  models: true
   store: true
   handlers: false
   router: false
@@ -302,7 +302,7 @@ generate:
 `)
 	cfg, _ := config.Load(path)
 
-	if !cfg.Generate.IsEnabled("types") {
+	if !cfg.Generate.IsEnabled("models") {
 		t.Error("types should be enabled")
 	}
 	if cfg.Generate.IsEnabled("handlers") {
