@@ -120,7 +120,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
     }
     row, err := h.store.Create(r.Context(), req)
     if err != nil {
-        writeError(w, http.StatusInternalServerError, "failed to create user")
+        handleStoreError(w, err, "users", "create")
         return
     }
     writeJSON(w, http.StatusCreated, row)
