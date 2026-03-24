@@ -112,10 +112,11 @@ type Column struct {
 	Nullable     bool
 	IsPrimaryKey bool
 	IsUnique     bool
-	HasDefault   bool   // true if DB has a default value (affects Create request structs)
-	DefaultValue string // raw default expression e.g. "gen_random_uuid()", "now()"
-	MaxLength    *int   // populated for string types from varchar(n)
-	Ordinal      int    // column position in the table
+	HasDefault   bool     // true if DB has a default value (affects Create request structs)
+	DefaultValue string   // raw default expression e.g. "gen_random_uuid()", "now()"
+	MaxLength    *int     // populated for string types from varchar(n)
+	EnumValues   []string // allowed values from config; generates oneof= validation
+	Ordinal      int      // column position in the table
 }
 
 // GoName returns the idiomatic Go field name for this column,
@@ -248,6 +249,9 @@ func (c *Column) ValidationTag() string {
 	if !c.Nullable && !c.HasDefault && !c.IsPrimaryKey {
 		tags = append(tags, "required")
 	}
+	if len(c.EnumValues) > 0 {
+		tags = append(tags, "oneof="+strings.Join(c.EnumValues, " "))
+	}
 	if c.GoType.Name == "string" {
 		if c.MaxLength != nil {
 			tags = append(tags, fmt.Sprintf("max=%d", *c.MaxLength))
@@ -265,7 +269,10 @@ func (c *Column) ValidationTag() string {
 func (c *Column) UpdateValidationTag() string {
 	var tags []string
 
-	// Never required on update - all fields are optional.
+	// Never required on update — all fields are optional.
+	if len(c.EnumValues) > 0 {
+		tags = append(tags, "oneof="+strings.Join(c.EnumValues, " "))
+	}
 	if c.GoType.Name == "string" {
 		if c.MaxLength != nil {
 			tags = append(tags, fmt.Sprintf("max=%d", *c.MaxLength))

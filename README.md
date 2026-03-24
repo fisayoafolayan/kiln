@@ -341,6 +341,8 @@ overrides:
     sortable_fields:            # allowlist for sorting; empty = all columns
       - created_at
       - name
+    enums:                      # allowed values for string columns
+      role: [member, moderator, admin]
     # disable_filters: true     # opt-out of filtering entirely
     # disable_sorting: true     # opt-out of sorting entirely
 ```
@@ -371,6 +373,40 @@ Range operators (`gt/gte/lt/lte`) are available for numeric and timestamp column
 
 By default, all non-hidden columns are filterable and sortable.
 Use `filterable_fields` / `sortable_fields` in overrides to restrict which columns are exposed.
+
+### Enum Validation
+
+If your schema uses `CHECK` constraints, kiln auto-detects allowed values and generates validation:
+
+```sql
+CREATE TABLE posts (
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived'))
+);
+```
+
+This generates `validate:"oneof=draft published archived"` automatically - no config needed.
+
+For columns without `CHECK` constraints, specify allowed values in `kiln.yaml`:
+
+```yaml
+overrides:
+  posts:
+    enums:
+      status: [draft, published, archived]
+```
+
+Invalid values return a structured error:
+
+```json
+{
+  "error": "validation failed",
+  "fields": {
+    "status": "must be one of: draft published archived"
+  }
+}
+```
+
+Config values always take precedence over auto-detected constraints.
 
 ---
 

@@ -229,6 +229,49 @@ func TestUpdateRequestHasNoRequiredTag(t *testing.T) {
 	}
 }
 
+func TestEnumValuesGenerateOneofTag(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+	cfg.Overrides = map[string]config.TableOverride{
+		"users": {
+			Enums: map[string][]string{
+				"role": {"member", "moderator", "admin"},
+			},
+		},
+	}
+
+	g := generator.New(cfg, testSchema())
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("generator.Run() failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, "models/users.go"))
+	if err != nil {
+		t.Fatalf("reading models/users.go: %v", err)
+	}
+	src := string(content)
+
+	// Create request should have oneof tag.
+	if !strings.Contains(src, `oneof=member moderator admin`) {
+		t.Error("CreateUserRequest should contain oneof=member moderator admin validation tag")
+	}
+
+	// Update request should have omitempty,oneof (not required).
+	idx := strings.Index(src, "type UpdateUserRequest struct")
+	if idx == -1 {
+		t.Fatal("UpdateUserRequest not found")
+	}
+	end := strings.Index(src[idx:], "\n}")
+	updateStruct := src[idx : idx+end]
+
+	if !strings.Contains(updateStruct, `omitempty,oneof=member moderator admin`) {
+		t.Error("UpdateUserRequest should contain omitempty,oneof=member moderator admin")
+	}
+	if strings.Contains(updateStruct, `required`) {
+		t.Error("UpdateUserRequest should not contain required")
+	}
+}
+
 func TestRouterContainsNestedRoute(t *testing.T) {
 	outDir := t.TempDir()
 	cfg := testConfig(t, outDir)

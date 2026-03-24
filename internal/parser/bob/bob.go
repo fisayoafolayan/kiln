@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -91,6 +92,9 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 	if err := p.resolveRelationships(schema); err != nil {
 		return nil, fmt.Errorf("resolving relationships: %w", err)
 	}
+
+	// Extract enum values from CHECK constraints in dbinfo files.
+	p.extractEnumsFromDBInfo(schema)
 
 	return schema, nil
 }
@@ -515,6 +519,272 @@ func isBoilerplateFile(path string) bool {
 // "UserProfile" → "user_profiles", "Category" → "categories"
 func toTableName(modelName string) string {
 	return flect.Underscore(flect.Pluralize(modelName))
+}
+
+// ---------------------------------------------------------------------------
+// Enum auto-detection from dbinfo CHECK constraints
+// ---------------------------------------------------------------------------
+
+// checkEnumRe matches CHECK expressions like:
+//
+//	(role = ANY (ARRAY['member'::text, 'admin'::text]))         -- Postgres
+//	((role)::text = ANY ((ARRAY[...])::text[]))                 -- Postgres (cast variant)
+//	(`status` in ('draft','published','archived'))               -- MySQL
+//	(status IN ('draft', 'published', 'archived'))               -- generic
+var checkEnumRe = regexp.MustCompile(`(?i)IN\s*\(\s*(?:ARRAY\[)?\s*'([^']+)'`)
+
+// extractINValues parses enum values from a CHECK expression containing an IN clause.
+func extractINValues(expr string) []string {
+	// Match all single-quoted values in the expression.
+	re := regexp.MustCompile(`'([^']+?)'`)
+	matches := re.FindAllStringSubmatch(expr, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	var vals []string
+	for _, m := range matches {
+		v := m[1]
+		// Strip Postgres type casts like 'draft'::text
+		if idx := strings.Index(v, "::"); idx > 0 {
+			v = v[:idx]
+		}
+		vals = append(vals, v)
+	}
+	return vals
+}
+
+// extractEnumsFromDBInfo reads the dbinfo directory (sibling to ModelsDir)
+// and populates Column.EnumValues from CHECK constraint expressions.
+func (p *Parser) extractEnumsFromDBInfo(schema *ir.Schema) {
+	// dbinfo sits alongside the models directory.
+	dbinfoDir := filepath.Join(filepath.Dir(p.ModelsDir), "dbinfo")
+	files, err := filepath.Glob(filepath.Join(dbinfoDir, "*.bob.go"))
+	if err != nil || len(files) == 0 {
+		return // no dbinfo — nothing to do
+	}
+
+	// Build a map of table name → column name → enum values from check expressions.
+	enumMap := p.parseDBInfoChecks(files)
+
+	// Apply to schema columns (only if not already set by config).
+	for _, t := range schema.Tables {
+		colEnums, ok := enumMap[t.Name]
+		if !ok {
+			continue
+		}
+		for _, c := range t.Columns {
+			if vals, ok := colEnums[c.Name]; ok && len(c.EnumValues) == 0 {
+				c.EnumValues = vals
+			}
+		}
+	}
+}
+
+// parseDBInfoChecks parses dbinfo Go files and extracts check constraint
+// expressions, returning a map of tableName → columnName → enumValues.
+//
+// Bob generates per-table dbinfo files with typed checks structs:
+//
+//	func (c userChecks) AsSlice() []check {
+//	    return []check{
+//	        {constraint: constraint{Name: "...", Columns: []string{"role"}}, Expression: "...IN ('a','b')..."},
+//	    }
+//	}
+//
+// The table name is inferred from the receiver type (e.g. "userChecks" → "users").
+func (p *Parser) parseDBInfoChecks(files []string) map[string]map[string][]string {
+	result := make(map[string]map[string][]string)
+	fset := token.NewFileSet()
+
+	for _, path := range files {
+		base := filepath.Base(path)
+		if base == "bob_types.bob.go" || strings.HasSuffix(base, "_test.go") {
+			continue
+		}
+
+		src, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		f, err := parser.ParseFile(fset, path, src, 0)
+		if err != nil {
+			continue
+		}
+
+		// Walk function declarations looking for AsSlice() on *Checks receivers.
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != "AsSlice" || fn.Recv == nil {
+				continue
+			}
+			// Get receiver type name, e.g. "userChecks".
+			recvType := receiverTypeName(fn)
+			if !strings.HasSuffix(recvType, "Checks") {
+				continue
+			}
+			// "userChecks" → "user" → "users"
+			prefix := strings.TrimSuffix(recvType, "Checks")
+			tableName := flect.Pluralize(flect.Underscore(prefix))
+
+			checks := extractChecksFromFunc(fn, string(src))
+			if len(checks) == 0 {
+				continue
+			}
+
+			colEnums := make(map[string][]string)
+			for _, chk := range checks {
+				for _, col := range chk.columns {
+					vals := extractINValues(chk.expr)
+					if len(vals) > 0 {
+						colEnums[col] = vals
+					}
+				}
+			}
+			if len(colEnums) > 0 {
+				result[tableName] = colEnums
+			}
+		}
+	}
+	return result
+}
+
+type parsedCheck struct {
+	columns []string
+	expr    string
+}
+
+// receiverTypeName returns the type name of a method receiver.
+func receiverTypeName(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+	switch t := fn.Recv.List[0].Type.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		if id, ok := t.X.(*ast.Ident); ok {
+			return id.Name
+		}
+	}
+	return ""
+}
+
+// extractChecksFromFunc extracts check constraint data from an AsSlice()
+// function body by reading the source text of composite literals.
+// This is simpler and more robust than deep AST walking for nested structs.
+func extractChecksFromFunc(fn *ast.FuncDecl, src string) []parsedCheck {
+	if fn.Body == nil {
+		return nil
+	}
+
+	// Find return statement with a []check{...} composite literal.
+	for _, stmt := range fn.Body.List {
+		ret, ok := stmt.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) == 0 {
+			continue
+		}
+		lit, ok := ret.Results[0].(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		// Each element in the slice is a check{...} struct literal.
+		var checks []parsedCheck
+		for _, elt := range lit.Elts {
+			chkLit, ok := elt.(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			chk := parseCheckLit(chkLit, src)
+			if chk.expr != "" {
+				checks = append(checks, chk)
+			}
+		}
+		return checks
+	}
+	return nil
+}
+
+// parseCheckLit extracts columns and expression from a check{} composite literal.
+func parseCheckLit(lit *ast.CompositeLit, src string) parsedCheck {
+	var chk parsedCheck
+
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+
+		switch key.Name {
+		case "Expression":
+			// Extract the string value from source.
+			if bl, ok := kv.Value.(*ast.BasicLit); ok && bl.Kind == token.STRING {
+				val, err := strconv.Unquote(bl.Value)
+				if err == nil {
+					chk.expr = val
+				}
+			}
+		case "Columns":
+			// Extract []string{"col1", "col2"} values.
+			if cl, ok := kv.Value.(*ast.CompositeLit); ok {
+				for _, e := range cl.Elts {
+					if bl, ok := e.(*ast.BasicLit); ok && bl.Kind == token.STRING {
+						val, err := strconv.Unquote(bl.Value)
+						if err == nil {
+							chk.columns = append(chk.columns, val)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// The check struct embeds constraint which has Columns.
+	// Bob nests it: check{constraint: constraint{Columns: [...]}, Expression: "..."}
+	// We need to handle both flat and nested.
+	if len(chk.columns) == 0 {
+		// Look for nested constraint{} literal.
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "constraint" {
+				continue
+			}
+			nestedLit, ok := kv.Value.(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			for _, nelt := range nestedLit.Elts {
+				nkv, ok := nelt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				nkey, ok := nkv.Key.(*ast.Ident)
+				if !ok || nkey.Name != "Columns" {
+					continue
+				}
+				if cl, ok := nkv.Value.(*ast.CompositeLit); ok {
+					for _, e := range cl.Elts {
+						if bl, ok := e.(*ast.BasicLit); ok && bl.Kind == token.STRING {
+							val, err := strconv.Unquote(bl.Value)
+							if err == nil {
+								chk.columns = append(chk.columns, val)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return chk
 }
 
 func toSnakeCase(s string) string {

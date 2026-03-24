@@ -38,6 +38,16 @@ func NewWithModulePath(cfg *config.Config, schema *ir.Schema, modulePath string)
 	} else {
 		fmt.Fprintf(os.Stderr, "  [generator] module path: %s\n", modulePath)
 	}
+	// Apply config enum values to IR columns.
+	for _, t := range schema.Tables {
+		override := cfg.OverrideFor(t.Name)
+		for _, c := range t.Columns {
+			if vals := override.EnumValuesFor(c.Name); len(vals) > 0 {
+				c.EnumValues = vals
+			}
+		}
+	}
+
 	return &Generator{
 		opts: genopt.NewOptions(modulePath, cfg, schema),
 	}

@@ -15,7 +15,7 @@ CREATE TABLE users (
                        email      VARCHAR(255) NOT NULL UNIQUE,
                        name       VARCHAR(255) NOT NULL,
                        bio        TEXT,
-                       role       VARCHAR(50)  NOT NULL DEFAULT 'member',
+                       role       VARCHAR(50)  NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'moderator', 'admin')),
                        created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
                        updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -25,7 +25,7 @@ CREATE TABLE posts (
                        user_id      CHAR(36)     NOT NULL,
                        title        VARCHAR(500) NOT NULL,
                        body         TEXT         NOT NULL,
-                       status       VARCHAR(50)  NOT NULL DEFAULT 'draft',
+                       status       VARCHAR(50)  NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
                        published_at DATETIME,
                        created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
                        updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

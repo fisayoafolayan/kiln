@@ -132,14 +132,15 @@ type TestsConfig struct {
 
 // TableOverride holds per-table customisations.
 type TableOverride struct {
-	Endpoint         string   `yaml:"endpoint"`          // override the URL path segment
-	ReadonlyFields   []string `yaml:"readonly_fields"`   // excluded from Create/Update
-	HiddenFields     []string `yaml:"hidden_fields"`     // excluded from all responses
-	Disable          []string `yaml:"disable"`           // operations to disable: create|update|delete|list|get
-	FilterableFields []string `yaml:"filterable_fields"` // allowlist; empty = all non-hidden columns
-	SortableFields   []string `yaml:"sortable_fields"`   // allowlist; empty = all non-hidden columns
-	DisableFilters   bool     `yaml:"disable_filters"`   // opt-out of filtering entirely
-	DisableSorting   bool     `yaml:"disable_sorting"`   // opt-out of sorting entirely
+	Endpoint         string              `yaml:"endpoint"`          // override the URL path segment
+	ReadonlyFields   []string            `yaml:"readonly_fields"`   // excluded from Create/Update
+	HiddenFields     []string            `yaml:"hidden_fields"`     // excluded from all responses
+	Disable          []string            `yaml:"disable"`           // operations to disable: create|update|delete|list|get
+	FilterableFields []string            `yaml:"filterable_fields"` // allowlist; empty = all non-hidden columns
+	SortableFields   []string            `yaml:"sortable_fields"`   // allowlist; empty = all non-hidden columns
+	DisableFilters   bool                `yaml:"disable_filters"`   // opt-out of filtering entirely
+	DisableSorting   bool                `yaml:"disable_sorting"`   // opt-out of sorting entirely
+	Enums            map[string][]string `yaml:"enums"`             // column → allowed values
 	readonlySet      map[string]bool
 	hiddenSet        map[string]bool
 	disableSet       map[string]bool
@@ -186,6 +187,11 @@ func (o TableOverride) IsFieldSortable(field string) bool {
 		return o.sortableSet[field]
 	}
 	return !o.IsFieldHidden(field)
+}
+
+// EnumValuesFor returns the allowed enum values for a column, or nil if not configured.
+func (o TableOverride) EnumValuesFor(field string) []string {
+	return o.Enums[field]
 }
 
 // Load reads and validates a kiln.yaml file at the given path.

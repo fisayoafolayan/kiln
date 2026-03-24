@@ -14,7 +14,7 @@ CREATE TABLE users (
                        email       TEXT        NOT NULL UNIQUE,
                        name        TEXT        NOT NULL,
                        bio         TEXT,
-                       role        TEXT        NOT NULL DEFAULT 'member',
+                       role        TEXT        NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'moderator', 'admin')),
                        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
                        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -24,7 +24,7 @@ CREATE TABLE posts (
                        user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                        title        TEXT        NOT NULL,
                        body         TEXT        NOT NULL,
-                       status       TEXT        NOT NULL DEFAULT 'draft',
+                       status       TEXT        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
                        published_at TIMESTAMPTZ,
                        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
                        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
