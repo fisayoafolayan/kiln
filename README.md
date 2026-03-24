@@ -3,6 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
+[![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 
 > Turn your database schema into a production-ready Go API.
 > No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.

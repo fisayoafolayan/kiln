@@ -1,6 +1,6 @@
 site_name: kiln
 site_description: Turn your database schema into a production-ready Go API
-site_url: https://fisayoafolayan.github.io/kiln
+site_url: https://kiln.fisayoafolayan.com
 repo_url: https://github.com/fisayoafolayan/kiln
 repo_name: fisayoafolayan/kiln
 
