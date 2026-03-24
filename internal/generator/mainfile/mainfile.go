@@ -49,7 +49,7 @@ func (g *Generator) Run() ([]string, error) {
 
 	data := g.templateData()
 
-	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+	if _, err := genopt.ExecuteAndWrite(g.tmpl, data, path, true); err != nil {
 		return nil, err
 	}
 

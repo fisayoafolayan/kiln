@@ -15,6 +15,7 @@ func generateCmd() *cobra.Command {
 		table  string
 		noBob  bool
 		dryRun bool
+		force  bool
 	)
 
 	cmd := &cobra.Command{
@@ -67,6 +68,7 @@ handlers, router, and OpenAPI spec.`,
 
 			// Step 4 — run generators
 			g := generator.New(cfg, schema)
+			g.SetForce(force)
 			if dryRun {
 				return g.Diff(os.Stdout)
 			}
@@ -77,6 +79,7 @@ handlers, router, and OpenAPI spec.`,
 	cmd.Flags().StringVar(&table, "table", "", "only regenerate a specific table")
 	cmd.Flags().BoolVar(&noBob, "no-bob", false, "skip schema reading, use existing models")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print what would be generated without writing files")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite files even if they have been manually edited")
 
 	return cmd
 }

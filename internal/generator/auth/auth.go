@@ -53,7 +53,7 @@ func (g *Generator) Run() ([]string, error) {
 		OutputPkg: "auth",
 		Header:    g.opts.Config.Auth.Header,
 	}
-	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+	if _, err := genopt.ExecuteAndWrite(g.tmpl, data, path, true); err != nil {
 		return nil, err
 	}
 

@@ -111,8 +111,12 @@ func (g *Generator) writeMapper(t *ir.Table, outDir string) (string, bool, error
 }
 
 func (g *Generator) writeFile(tmpl *template.Template, data templateData, path string) (string, error) {
-	if err := genopt.ExecuteAndWrite(tmpl, data, path); err != nil {
+	skipped, err := genopt.ExecuteAndWrite(tmpl, data, path, g.opts.Force)
+	if err != nil {
 		return "", err
+	}
+	if skipped {
+		return "", nil
 	}
 	return path, nil
 }

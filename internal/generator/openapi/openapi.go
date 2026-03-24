@@ -47,8 +47,12 @@ func (g *Generator) Run() ([]string, error) {
 		return nil, fmt.Errorf("executing openapi template: %w", err)
 	}
 
-	if err := os.WriteFile(outPath, buf.Bytes(), 0644); err != nil {
-		return nil, fmt.Errorf("writing %q: %w", outPath, err)
+	skipped, err := genopt.WriteRawWithChecksum(buf.Bytes(), outPath, g.opts.Force)
+	if err != nil {
+		return nil, err
+	}
+	if skipped {
+		return nil, nil
 	}
 	return []string{outPath}, nil
 }

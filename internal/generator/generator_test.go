@@ -305,6 +305,141 @@ func TestOpenAPIContainsAllTables(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Level 2: Checksum tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestChecksumIsEmbedded(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+
+	g := generator.New(cfg, testSchema())
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("generator.Run() failed: %v", err)
+	}
+
+	// Check a generated Go file has a real checksum, not the placeholder.
+	content, err := os.ReadFile(filepath.Join(outDir, "types/users.go"))
+	if err != nil {
+		t.Fatalf("reading types/users.go: %v", err)
+	}
+	if strings.Contains(string(content), "__CHECKSUM__") {
+		t.Error("types/users.go still contains __CHECKSUM__ placeholder")
+	}
+	if !strings.Contains(string(content), "kiln:checksum=") {
+		t.Error("types/users.go missing checksum marker")
+	}
+}
+
+func TestUserEditedFileIsSkipped(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+	schema := testSchema()
+
+	// First run — generates files with checksums.
+	g := generator.New(cfg, schema)
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("first Run() failed: %v", err)
+	}
+
+	typesPath := filepath.Join(outDir, "types/users.go")
+	original, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading types/users.go: %v", err)
+	}
+
+	// Simulate a user edit.
+	edited := append(original, []byte("\n// user customisation\n")...)
+	if err := os.WriteFile(typesPath, edited, 0644); err != nil {
+		t.Fatalf("writing edited file: %v", err)
+	}
+
+	// Second run — should skip the edited file.
+	g2 := generator.New(cfg, schema)
+	if err := g2.Run(os.Stdout); err != nil {
+		t.Fatalf("second Run() failed: %v", err)
+	}
+
+	after, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading after second run: %v", err)
+	}
+	if string(after) != string(edited) {
+		t.Error("user-edited file was overwritten — checksum guard failed")
+	}
+}
+
+func TestForceOverwritesEditedFile(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+	schema := testSchema()
+
+	// First run.
+	g := generator.New(cfg, schema)
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("first Run() failed: %v", err)
+	}
+
+	typesPath := filepath.Join(outDir, "types/users.go")
+	original, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading types/users.go: %v", err)
+	}
+
+	// Simulate a user edit.
+	edited := append(original, []byte("\n// user customisation\n")...)
+	if err := os.WriteFile(typesPath, edited, 0644); err != nil {
+		t.Fatalf("writing edited file: %v", err)
+	}
+
+	// Second run with force — should overwrite.
+	g2 := generator.New(cfg, schema)
+	g2.SetForce(true)
+	if err := g2.Run(os.Stdout); err != nil {
+		t.Fatalf("second Run() with force failed: %v", err)
+	}
+
+	after, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading after force run: %v", err)
+	}
+	if strings.Contains(string(after), "user customisation") {
+		t.Error("force run did not overwrite user-edited file")
+	}
+}
+
+func TestUnmodifiedFileIsRegenerated(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+	schema := testSchema()
+
+	// First run.
+	g := generator.New(cfg, schema)
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("first Run() failed: %v", err)
+	}
+
+	typesPath := filepath.Join(outDir, "types/users.go")
+	original, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading types/users.go: %v", err)
+	}
+
+	// Second run without edits — file should be regenerated (content unchanged).
+	g2 := generator.New(cfg, schema)
+	if err := g2.Run(os.Stdout); err != nil {
+		t.Fatalf("second Run() failed: %v", err)
+	}
+
+	after, err := os.ReadFile(typesPath)
+	if err != nil {
+		t.Fatalf("reading after second run: %v", err)
+	}
+	if string(after) != string(original) {
+		t.Error("unmodified file content changed after regeneration")
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Level 2: Compilation test
 // ─────────────────────────────────────────────────────────────────────────────
 

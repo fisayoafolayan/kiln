@@ -43,6 +43,9 @@ func NewWithModulePath(cfg *config.Config, schema *ir.Schema, modulePath string)
 	}
 }
 
+// SetForce enables overwriting user-modified files.
+func (g *Generator) SetForce(force bool) { g.opts.Force = force }
+
 // runnable is the interface shared by all sub-generators.
 type runnable interface {
 	Run() ([]string, error)

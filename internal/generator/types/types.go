@@ -75,8 +75,12 @@ func (g *Generator) writeTable(t *ir.Table, outDir string) (string, error) {
 	}
 
 	path := filepath.Join(outDir, t.Name+".go")
-	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+	skipped, err := genopt.ExecuteAndWrite(g.tmpl, data, path, g.opts.Force)
+	if err != nil {
 		return "", err
+	}
+	if skipped {
+		return "", nil
 	}
 	return path, nil
 }

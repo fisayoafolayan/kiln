@@ -3,15 +3,22 @@ package genopt
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"go/format"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 
 	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/fisayoafolayan/kiln/internal/ir"
 )
+
+const checksumPlaceholder = "__CHECKSUM__"
+
+var checksumRe = regexp.MustCompile(`kiln:checksum=([a-f0-9]{64})`)
 
 // Options holds resolved values shared across all generators.
 type Options struct {
@@ -20,6 +27,7 @@ type Options struct {
 	Dialect    Dialect // database dialect — drives template choices
 	Config     *config.Config
 	Schema     *ir.Schema
+	Force      bool // overwrite user-modified files
 }
 
 // Dialect represents the database dialect for template generation.
@@ -52,25 +60,99 @@ func NewOptions(modulePath string, cfg *config.Config, schema *ir.Schema) Option
 	}
 }
 
+// computeChecksum returns the SHA-256 hex digest of content.
+func computeChecksum(content []byte) string {
+	h := sha256.Sum256(content)
+	return hex.EncodeToString(h[:])
+}
+
+// embedChecksum computes a SHA-256 over content (which must contain the
+// literal __CHECKSUM__ placeholder), then replaces the placeholder with
+// the hex digest.
+func embedChecksum(content []byte) []byte {
+	sum := computeChecksum(content)
+	return bytes.Replace(content, []byte(checksumPlaceholder), []byte(sum), 1)
+}
+
+// FileIsUserModified reports whether the file at path has been edited
+// since kiln last generated it. It returns false (not modified) when
+// the file does not exist or has no embedded checksum.
+func FileIsUserModified(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	m := checksumRe.FindSubmatch(data)
+	if m == nil {
+		// No valid checksum marker — treat as unmanaged (allow overwrite).
+		return false, nil
+	}
+
+	storedSum := string(m[1])
+	// Replace the stored checksum back with the placeholder and re-hash.
+	withPlaceholder := checksumRe.ReplaceAll(data, []byte("kiln:checksum="+checksumPlaceholder))
+	actual := computeChecksum(withPlaceholder)
+	return storedSum != actual, nil
+}
+
 // ExecuteAndWrite executes a Go template, formats the output with gofmt,
-// and writes the result to path. Returns an error if formatting fails
-// (the unformatted output is still written for debugging).
-func ExecuteAndWrite(tmpl *template.Template, data any, path string) error {
+// embeds a content checksum, and writes the result to path.
+// If the file was previously generated and the user has modified it,
+// the write is skipped (returns skipped=true) unless force is true.
+func ExecuteAndWrite(tmpl *template.Template, data any, path string, force bool) (skipped bool, err error) {
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("executing template: %w", err)
+		return false, fmt.Errorf("executing template: %w", err)
 	}
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
 		// Write unformatted output so the user can debug the template,
 		// but still return the formatting error.
 		_ = os.WriteFile(path, buf.Bytes(), 0644)
-		return fmt.Errorf("formatting %q: %w (unformatted output written for debugging)", path, err)
+		return false, fmt.Errorf("formatting %q: %w (unformatted output written for debugging)", path, err)
 	}
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
-		return fmt.Errorf("writing %q: %w", path, err)
+
+	if !force {
+		modified, err := FileIsUserModified(path)
+		if err != nil {
+			return false, fmt.Errorf("checking %q: %w", path, err)
+		}
+		if modified {
+			fmt.Fprintf(os.Stderr, "  ⚠ SKIPPED  %s (user-modified; use --force to overwrite)\n", path)
+			return true, nil
+		}
 	}
-	return nil
+
+	final := embedChecksum(formatted)
+	if err := os.WriteFile(path, final, 0644); err != nil {
+		return false, fmt.Errorf("writing %q: %w", path, err)
+	}
+	return false, nil
+}
+
+// WriteRawWithChecksum embeds a checksum and writes raw (non-Go) content
+// to path, with the same user-modification guard as ExecuteAndWrite.
+func WriteRawWithChecksum(content []byte, path string, force bool) (skipped bool, err error) {
+	if !force {
+		modified, err := FileIsUserModified(path)
+		if err != nil {
+			return false, fmt.Errorf("checking %q: %w", path, err)
+		}
+		if modified {
+			fmt.Fprintf(os.Stderr, "  ⚠ SKIPPED  %s (user-modified; use --force to overwrite)\n", path)
+			return true, nil
+		}
+	}
+
+	final := embedChecksum(content)
+	if err := os.WriteFile(path, final, 0644); err != nil {
+		return false, fmt.Errorf("writing %q: %w", path, err)
+	}
+	return false, nil
 }
 
 // dialectFor returns the Dialect for the given driver string.

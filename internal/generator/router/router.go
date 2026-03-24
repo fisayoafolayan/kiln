@@ -49,8 +49,12 @@ func (g *Generator) Diff() []string {
 func (g *Generator) writeRouter(outDir string) (string, error) {
 	data := g.templateData()
 	path := filepath.Join(outDir, "router.go")
-	if err := genopt.ExecuteAndWrite(g.tmpl, data, path); err != nil {
+	skipped, err := genopt.ExecuteAndWrite(g.tmpl, data, path, g.opts.Force)
+	if err != nil {
 		return "", err
+	}
+	if skipped {
+		return "", nil
 	}
 	return path, nil
 }
