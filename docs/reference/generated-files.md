@@ -4,7 +4,7 @@ kiln generates two categories of files: **auto-generated** (regenerated on each 
 
 ## Auto-Generated Files
 
-These are regenerated on each `kiln generate`. Each has an embedded checksum — if you edit one, kiln detects the change and skips it.
+These are regenerated on each `kiln generate`. Each has an embedded checksum - if you edit one, kiln detects the change and skips it.
 
 | File | Contents |
 |------|----------|
@@ -51,12 +51,12 @@ A single file that registers all routes. Supports stdlib `http.ServeMux` or chi.
 
 Generated once on first run. kiln never overwrites them. Edit freely.
 
-| File | Purpose |
-|------|---------|
+| File | Purpose                                                                   |
+|------|---------------------------------------------------------------------------|
 | `generated/store/mappers/<table>.go` | Map bob model to response type. Add computed fields, hide sensitive data. |
-| `generated/handlers/helpers.go` | Error formatting, pagination parsing, request validation. |
-| `generated/auth/middleware.go` | Auth middleware skeleton (if auth enabled). |
-| `cmd/server/main.go` | Server entry point — wires stores, handlers, and router. |
+| `generated/handlers/helpers.go` | Error formatting, pagination parsing, request validation.                 |
+| `generated/auth/middleware.go` | Auth middleware skeleton (if auth enabled).                               |
+| `cmd/server/main.go` | Server entry point - wires stores, handlers, and router.                  |
 
 ## Internal Files (Bob)
 

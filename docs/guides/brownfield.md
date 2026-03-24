@@ -1,6 +1,6 @@
 # Brownfield Adoption
 
-kiln is designed for incremental adoption. You don't have to generate everything — adopt one layer at a time.
+kiln is designed for incremental adoption. You don't have to generate everything - adopt one layer at a time.
 
 ## Toggle Layers
 

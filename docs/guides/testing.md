@@ -1,6 +1,6 @@
 # Testing Generated Code
 
-kiln doesn't generate tests — testing strategies are too project-specific. But the generated code is designed to be easy to test.
+kiln doesn't generate tests - testing strategies are too project-specific. But the generated code is designed to be easy to test.
 
 ## Testing Handlers
 
