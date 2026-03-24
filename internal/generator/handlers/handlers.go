@@ -151,6 +151,23 @@ func funcMap() template.FuncMap {
 		"needsRangeOps": func(gt ir.GoType) bool {
 			return gt.SupportsRangeOps()
 		},
+		"filterNeedsStrconv": func(cols []*ir.Column) bool {
+			for _, c := range cols {
+				switch c.GoType.Name {
+				case "int32", "int64", "float64", "bool":
+					return true
+				}
+			}
+			return false
+		},
+		"filterNeedsTime": func(cols []*ir.Column) bool {
+			for _, c := range cols {
+				if c.GoType.Name == "time.Time" {
+					return true
+				}
+			}
+			return false
+		},
 		// filterParseSnippet returns the Go code to parse a query param value
 		// into a pointer of the column's Go type and assign it to a target variable.
 		"filterParseSnippet": func(c *ir.Column, target string) string {
@@ -189,9 +206,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-{{if or .FilterableCols (not (pkIsStringLike .Table))}}	"strconv"
+{{if or (filterNeedsStrconv .FilterableCols) (not (pkIsStringLike .Table))}}	"strconv"
 {{end}}{{if .SortableCols}}	"strings"
-{{end}}{{if .FilterableCols}}	"time"
+{{end}}{{if filterNeedsTime .FilterableCols}}	"time"
 {{end}}
 	"{{.ImportPath}}/store"
 	"{{.ImportPath}}/types"

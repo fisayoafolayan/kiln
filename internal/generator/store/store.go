@@ -191,6 +191,22 @@ func funcMap() template.FuncMap {
 			}
 			return false
 		},
+		"filterNeedsTime": func(cols []*ir.Column) bool {
+			for _, c := range cols {
+				if c.GoType.Name == "time.Time" {
+					return true
+				}
+			}
+			return false
+		},
+		"filterNeedsUUID": func(cols []*ir.Column) bool {
+			for _, c := range cols {
+				if c.GoType.Name == "uuid.UUID" {
+					return true
+				}
+			}
+			return false
+		},
 	}
 }
 
@@ -206,7 +222,8 @@ package store
 import (
 	"context"
 	"fmt"
-
+{{if filterNeedsTime .FilterableCols}}	"time"
+{{end}}
 	"github.com/aarondl/opt/omit"
 	{{if hasNullableWritable .WritableCols}}"github.com/aarondl/opt/omitnull"
 	{{end}}{{if .NeedsClientID}}"github.com/google/uuid"
