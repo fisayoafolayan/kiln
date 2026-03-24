@@ -162,7 +162,7 @@ curl -X PATCH http://localhost:8080/api/v1/users/{user-id} \
 | **Pagination** | `?page=2&page_size=10`                                                                           |
 | **Partial updates** | PATCH sends only changed fields, no `required` validation on omitted fields                      |
 | **Chi router** | `framework: chi` in kiln.yaml                                                                    |
-| **API key auth** | `strategy: api_key` - edit `generated/auth/middleware.go` to add your validation                 |
+| **Auth ready** | Set `strategy: api_key` or `strategy: jwt` in kiln.yaml to enable auth middleware               |
 | **OpenAPI spec** | Always in sync at `docs/openapi.yaml`                                                            |
 
 ## Project Structure

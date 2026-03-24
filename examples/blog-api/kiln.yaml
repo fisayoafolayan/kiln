@@ -13,8 +13,7 @@ api:
   framework: chi
 
 auth:
-  strategy: api_key
-  header: X-API-Key
+  strategy: none
 
 bob:
   enabled: true
