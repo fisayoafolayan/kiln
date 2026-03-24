@@ -1,0 +1,58 @@
+site_name: kiln
+site_description: Turn your database schema into a production-ready Go API
+site_url: https://fisayoafolayan.github.io/kiln
+repo_url: https://github.com/fisayoafolayan/kiln
+repo_name: fisayoafolayan/kiln
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration: configuration.md
+  - Features:
+    - Filtering & Sorting: features/filtering.md
+    - Enum Validation: features/enums.md
+    - Soft Deletes: features/soft-deletes.md
+    - Authentication: features/auth.md
+    - Chi Router: features/chi.md
+  - Guides:
+    - Schema Changes: guides/schema-changes.md
+    - Testing: guides/testing.md
+    - Brownfield Adoption: guides/brownfield.md
+  - Reference:
+    - CLI: reference/cli.md
+    - Generated Files: reference/generated-files.md
+    - kiln.yaml: reference/config-reference.md
