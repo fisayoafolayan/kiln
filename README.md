@@ -490,17 +490,29 @@ When adding a new feature:
 
 ## Roadmap
 
+**Shipped:**
 - [x] Postgres, MySQL/MariaDB, SQLite support
 - [x] Full CRUD handler generation
 - [x] OpenAPI 3.0 spec generation
-- [x] FK-derived nested routes (using bob's R struct for accurate resolution)
-- [x] Brownfield layer adoption
+- [x] FK-derived nested routes (from foreign keys)
+- [x] Brownfield layer adoption (toggle individual layers)
 - [x] go-playground/validator integration
-- [x] Bob version compatibility checking
-- [x] chi framework support
+- [x] Enum validation (auto-detected from CHECK constraints + config)
+- [x] Soft deletes (auto-detected from `deleted_at` column)
+- [x] MaxLength extraction from varchar(N)
+- [x] Chi and stdlib router support
 - [x] Filtering, sorting & pagination
 - [x] Authentication middleware (JWT and API key)
 - [x] Checksum-based regeneration safety
+- [x] Locale-independent database error classification
+
+**Up next:**
+- [ ] Composite PK link/unlink endpoints (many-to-many)
+- [ ] Cursor-based pagination
+- [ ] Gin framework support
+- [ ] Relationship loading (`?include=author`)
+- [ ] Transaction support in store
+- [ ] Batch create/update/delete endpoints
 
 ---
 
