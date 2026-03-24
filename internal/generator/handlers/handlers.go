@@ -124,10 +124,10 @@ func (g *Generator) templateData(t *ir.Table) templateData {
 
 	var filterable, sortable []*ir.Column
 	for _, c := range t.Columns {
-		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() {
+		if override.IsFieldFilterable(c.Name) && c.GoType.IsFilterable() && !c.IsSoftDeleteColumn() {
 			filterable = append(filterable, c)
 		}
-		if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() {
+		if override.IsFieldSortable(c.Name) && c.GoType.IsFilterable() && !c.IsSoftDeleteColumn() {
 			sortable = append(sortable, c)
 		}
 	}
