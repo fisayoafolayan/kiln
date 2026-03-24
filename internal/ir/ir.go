@@ -241,9 +241,9 @@ type ForeignKey struct {
 }
 
 // ValidationTag returns the `validate` struct tag value for a column.
-// Used by the types generator to produce validate annotations.
+// Used by the types generator for Create request annotations.
 func (c *Column) ValidationTag() string {
-	tags := []string{}
+	var tags []string
 
 	if !c.Nullable && !c.HasDefault && !c.IsPrimaryKey {
 		tags = append(tags, "required")
@@ -257,6 +257,25 @@ func (c *Column) ValidationTag() string {
 		return ""
 	}
 	return strings.Join(tags, ",")
+}
+
+// UpdateValidationTag returns the `validate` struct tag for Update requests.
+// All fields are optional (pointer + omitempty), so "required" is stripped
+// and "omitempty" is prepended to any remaining rules.
+func (c *Column) UpdateValidationTag() string {
+	var tags []string
+
+	// Never required on update - all fields are optional.
+	if c.GoType.Name == "string" {
+		if c.MaxLength != nil {
+			tags = append(tags, fmt.Sprintf("max=%d", *c.MaxLength))
+		}
+	}
+	if len(tags) == 0 {
+		return ""
+	}
+	// omitempty tells the validator to skip nil pointers.
+	return "omitempty," + strings.Join(tags, ",")
 }
 
 // FilterTable returns a copy of the schema containing only the named table.

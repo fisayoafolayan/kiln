@@ -197,6 +197,38 @@ func TestTypesFileContainsExpectedTypes(t *testing.T) {
 	}
 }
 
+func TestUpdateRequestHasNoRequiredTag(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+
+	g := generator.New(cfg, testSchema())
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("generator.Run() failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, "models/users.go"))
+	if err != nil {
+		t.Fatalf("reading models/users.go: %v", err)
+	}
+	src := string(content)
+
+	// Find the UpdateUserRequest struct and check it has no "required" validation.
+	idx := strings.Index(src, "type UpdateUserRequest struct")
+	if idx == -1 {
+		t.Fatal("UpdateUserRequest not found")
+	}
+	// Extract until the closing brace.
+	end := strings.Index(src[idx:], "\n}")
+	if end == -1 {
+		t.Fatal("could not find end of UpdateUserRequest struct")
+	}
+	updateStruct := src[idx : idx+end]
+
+	if strings.Contains(updateStruct, `validate:"required"`) {
+		t.Error("UpdateUserRequest has validate:\"required\" — PATCH fields should all be optional")
+	}
+}
+
 func TestRouterContainsNestedRoute(t *testing.T) {
 	outDir := t.TempDir()
 	cfg := testConfig(t, outDir)

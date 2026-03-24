@@ -130,9 +130,13 @@ func funcMap() template.FuncMap {
 		"isCreatable": func(c *ir.Column, o config.TableOverride) bool {
 			return !c.IsReadOnly() && !o.IsFieldHidden(c.Name) && !o.IsFieldReadonly(c.Name)
 		},
-		// validationTag returns the validate struct tag for a column.
+		// validationTag returns the validate struct tag for a column (Create requests).
 		"validationTag": func(c *ir.Column) string {
 			return c.ValidationTag()
+		},
+		// updateValidationTag returns the validate struct tag for Update requests.
+		"updateValidationTag": func(c *ir.Column) string {
+			return c.UpdateValidationTag()
 		},
 		// isOperationEnabled returns true if the operation is not disabled.
 		"isOperationEnabled": func(op string, o config.TableOverride) bool {
@@ -171,7 +175,7 @@ type Create{{.Table.GoName}}Request struct {
 // Update{{.Table.GoName}}Request is the request body for PATCH /{{.Table.Endpoint}}/:id.
 // All fields are optional — only non-nil fields are updated.
 type Update{{.Table.GoName}}Request struct {
-{{range .Table.Columns}}{{if isWritable . $.Override}}	{{.GoName}} *{{.GoType.Name}} ` + "`" + `json:"{{.JSONName}},omitempty"{{with validationTag .}} validate:"{{.}}"{{end}}` + "`" + `
+{{range .Table.Columns}}{{if isWritable . $.Override}}	{{.GoName}} *{{.GoType.Name}} ` + "`" + `json:"{{.JSONName}},omitempty"{{with updateValidationTag .}} validate:"{{.}}"{{end}}` + "`" + `
 {{end}}{{end}}}
 {{end}}
 
