@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/fisayoafolayan/kiln/internal/generator/genopt"
@@ -183,6 +184,13 @@ func funcMap() template.FuncMap {
 		"isGin": func(framework string) bool {
 			return framework == "gin"
 		},
+		// chiMethod converts "GET" to "Get", "POST" to "Post", etc.
+		"chiMethod": func(method string) string {
+			if len(method) == 0 {
+				return method
+			}
+			return strings.ToUpper(method[:1]) + strings.ToLower(method[1:])
+		},
 	}
 }
 
@@ -238,7 +246,7 @@ func RegisterRoutes(
 {{range .Tables}}	{{.Handler}} *handlers.{{.Table.GoName}}Handler,
 {{end}}) {
 {{range .Tables}}	// {{.Table.Name}}
-{{range .Routes}}	r.{{.Method}}("{{.Path}}", {{.Handler}})
+{{range .Routes}}	r.{{chiMethod .Method}}("{{.Path}}", {{.Handler}})
 {{end}}
 {{end}}}
 {{end}}

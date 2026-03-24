@@ -255,7 +255,7 @@ _e2e:
 		echo '  package: generated'; \
 		echo 'api:'; \
 		echo '  base_path: "/api/v1"'; \
-		echo '  framework: stdlib'; \
+		echo '  framework: chi'; \
 		echo 'bob:'; \
 		echo '  enabled: true'; \
 		echo '  models_dir: "./models"'; \

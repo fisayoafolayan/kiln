@@ -295,7 +295,7 @@ output:
 
 api:
   base_path: "/api/v1"          # prefix for all routes
-  framework: stdlib             # stdlib (chi/gin planned)
+  framework: stdlib             # stdlib | chi
 
 auth:
   strategy: none                # none | jwt | api_key
@@ -442,7 +442,7 @@ When adding a new feature:
 - [x] Brownfield layer adoption
 - [x] go-playground/validator integration
 - [x] Bob version compatibility checking
-- [ ] chi / gin framework support
+- [x] chi framework support
 - [x] Filtering, sorting & pagination
 - [x] Authentication middleware (JWT and API key)
 - [x] Checksum-based regeneration safety

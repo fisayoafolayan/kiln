@@ -231,6 +231,46 @@ func TestRouterContainsNestedRoute(t *testing.T) {
 	}
 }
 
+func TestChiRouterGeneratesValidGo(t *testing.T) {
+	outDir := t.TempDir()
+	cfg := testConfig(t, outDir)
+	cfg.API.Framework = "chi"
+
+	g := generator.New(cfg, testSchema())
+	if err := g.Run(os.Stdout); err != nil {
+		t.Fatalf("generator.Run() failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, "router.go"))
+	if err != nil {
+		t.Fatalf("reading router.go: %v", err)
+	}
+	src := string(content)
+
+	checks := []struct {
+		desc   string
+		substr string
+	}{
+		{"chi import", "go-chi/chi/v5"},
+		{"chi router param", "chi.Router"},
+		{"chi Get method", ".Get("},
+		{"chi Post method", ".Post("},
+		{"chi Patch method", ".Patch("},
+		{"chi Delete method", ".Delete("},
+	}
+
+	for _, c := range checks {
+		if !strings.Contains(src, c.substr) {
+			t.Errorf("%s: expected %q in router.go but not found", c.desc, c.substr)
+		}
+	}
+
+	// Should NOT contain stdlib mux references.
+	if strings.Contains(src, "http.ServeMux") {
+		t.Error("chi router should not contain http.ServeMux")
+	}
+}
+
 func TestMapperIsWriteOnce(t *testing.T) {
 	outDir := t.TempDir()
 	cfg := testConfig(t, outDir)

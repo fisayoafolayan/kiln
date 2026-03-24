@@ -22,7 +22,9 @@ type Generator struct {
 
 // New returns a Generator ready to run.
 func New(opts genopt.Options) (*Generator, error) {
-	tmpl, err := template.New("main").Parse(mainTemplate)
+	tmpl, err := template.New("main").Funcs(template.FuncMap{
+		"isChi": func(f string) bool { return f == "chi" },
+	}).Parse(mainTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("parsing main template: %w", err)
 	}
@@ -74,6 +76,7 @@ type templateData struct {
 	Port         string
 	DriverImport string
 	DriverName   string
+	Framework    string
 	Tables       []*ir.Table
 	AuthEnabled  bool
 }
@@ -92,6 +95,7 @@ func (g *Generator) templateData() templateData {
 		Port:         "8080",
 		DriverImport: g.opts.Dialect.DriverImport,
 		DriverName:   g.opts.Dialect.DriverName,
+		Framework:    g.opts.Config.API.Framework,
 		Tables:       tables,
 		AuthEnabled:  g.opts.Config.Auth.Strategy != "none",
 	}
@@ -108,7 +112,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/stephenafamo/bob"
+{{if isChi .Framework}}	"github.com/go-chi/chi/v5"
+{{end}}	"github.com/stephenafamo/bob"
 	_ "{{.DriverImport}}"
 	"{{.ImportPath}}"
 {{if .AuthEnabled}}	"{{.ImportPath}}/auth"
@@ -139,20 +144,27 @@ func main() {
 {{range .Tables}}	{{.Name}}Handler := handlers.New{{.GoName}}Handler({{.Name}}Store)
 {{end}}
 	// 4. Register routes.
-	mux := http.NewServeMux()
+{{if isChi .Framework}}	r := chi.NewRouter()
+{{if .AuthEnabled}}	// Auth middleware wraps all routes.
+	// Edit generated/auth/middleware.go to implement your validation logic.
+	r.Use(auth.Middleware)
+{{end}}	generated.RegisterRoutes(r,
+{{range .Tables}}		{{.Name}}Handler,
+{{end}}	)
+{{else}}	mux := http.NewServeMux()
 	generated.RegisterRoutes(mux,
 {{range .Tables}}		{{.Name}}Handler,
 {{end}}	)
-
+{{end}}
 	// 5. Start the server.
-{{if .AuthEnabled}}	// Auth middleware wraps all routes.
+{{if not (isChi .Framework)}}{{if .AuthEnabled}}	// Auth middleware wraps all routes.
 	// Edit generated/auth/middleware.go to implement your validation logic.
 	handler := auth.Middleware(mux)
-{{end}}
+{{end}}{{end}}
 	addr := ":{{.Port}}"
 	log.Printf("kiln server listening on http://localhost%s", addr)
 	log.Printf("API base path: {{.BasePath}}")
-	if err := http.ListenAndServe(addr, {{if .AuthEnabled}}handler{{else}}mux{{end}}); err != nil {
+	if err := http.ListenAndServe(addr, {{if isChi .Framework}}r{{else if .AuthEnabled}}handler{{else}}mux{{end}}); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
