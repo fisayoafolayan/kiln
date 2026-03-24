@@ -1,13 +1,13 @@
 # kiln
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.26-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.22-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 
 > Turn your database schema into a production-ready Go API.
 >
-> Eliminate schema drift — your API always matches your schema.
+> Eliminate schema drift - your API always matches your schema.
 > No runtime magic. No framework lock-in. Just clean, idiomatic Go code you own.
 
 ## Table of Contents
@@ -40,7 +40,8 @@
 
 ## The Problem
 
-Then the schema changes.
+You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.
+It works. Then the schema changes.
 
 A column is renamed. A constraint is added. A table is split.
 Your API doesn't match anymore. Tests pass. CI is green. Production breaks.
@@ -60,7 +61,7 @@ the compile step, and the output is a working API. Change the schema, recompile.
 
 ## Requirements
 
-- Go 1.26 or later
+- Go 1.22 or later
 - Docker (for running a local database during development)
 - A Postgres, MySQL/MariaDB, or SQLite database
 
@@ -93,7 +94,8 @@ CREATE TABLE users (
   email      TEXT        NOT NULL UNIQUE,
   name       TEXT        NOT NULL,
   bio        TEXT,
-  role       TEXT        NOT NULL DEFAULT 'member',
+  role       TEXT        NOT NULL DEFAULT 'member'
+                         CHECK (role IN ('member', 'moderator', 'admin')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -103,10 +105,12 @@ CREATE TABLE posts (
   user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title        TEXT        NOT NULL,
   body         TEXT        NOT NULL,
-  status       TEXT        NOT NULL DEFAULT 'draft',
+  status       TEXT        NOT NULL DEFAULT 'draft'
+                           CHECK (status IN ('draft', 'published', 'archived')),
   published_at TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at   TIMESTAMPTZ           -- nullable = soft delete enabled
 );
 ```
 
@@ -117,7 +121,7 @@ Run `kiln generate` and you immediately get:
 - `GET /api/v1/users/{id}` - get a user by ID
 - `PATCH /api/v1/users/{id}` - update a user
 - `DELETE /api/v1/users/{id}` - delete a user
-- `GET /api/v1/posts` - list posts
+- `GET /api/v1/posts` - list posts (soft-deleted posts excluded automatically)
 - `GET /api/v1/users/{id}/posts` - list posts by user ← **generated from the FK**
 
 Relationships in your database automatically become API routes.
@@ -168,8 +172,7 @@ package handlers
 
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
     var req models.CreateUserRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        writeError(w, http.StatusBadRequest, "invalid request body")
+    if !decodeJSON(w, r, &req) {
         return
     }
     if !validateRequest(w, req) {
@@ -633,9 +636,9 @@ All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
 
 ### What kiln is not
 
-- **Not an ORM** — no runtime query layer
-- **Not a framework** — no runtime control, no hidden magic
-- **Not one-shot scaffolding** — regenerate safely as your schema evolves
+- **Not an ORM** - no runtime query layer
+- **Not a framework** - no runtime control, no hidden magic
+- **Not one-shot scaffolding** - regenerate safely as your schema evolves
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
 

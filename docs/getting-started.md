@@ -4,7 +4,7 @@ From database schema to running API in under 5 minutes.
 
 ## Prerequisites
 
-- Go 1.22+
+- Go 1.22 or later
 - Docker (for running a local database)
 - A Postgres, MySQL/MariaDB, or SQLite database
 

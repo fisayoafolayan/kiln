@@ -6,7 +6,8 @@ Eliminate schema drift — your API always matches your schema. No runtime magic
 
 ## The Problem
 
-Then the schema changes. A column is renamed. A constraint is added.
+You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.
+It works. Then the schema changes. A column is renamed. A constraint is added.
 Your API doesn't match anymore. Tests pass. CI is green. Production breaks.
 
 Because your API no longer matches your schema. This is **schema drift**.
@@ -28,6 +29,15 @@ CREATE TABLE users (
   role  TEXT NOT NULL DEFAULT 'member'
     CHECK (role IN ('member', 'moderator', 'admin'))
 );
+
+CREATE TABLE posts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title      TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'published', 'archived')),
+  deleted_at TIMESTAMPTZ  -- nullable = soft delete enabled
+);
 ```
 
 ```bash
@@ -39,14 +49,16 @@ go run cmd/server/main.go
 You immediately get:
 
 - `GET /api/v1/users` - list with pagination, filtering & sorting
-- `POST /api/v1/users` - create with validation
+- `POST /api/v1/users` - create with validation (enum-checked `role`)
 - `GET /api/v1/users/{id}` - get by ID
 - `PATCH /api/v1/users/{id}` - partial update
 - `DELETE /api/v1/users/{id}` - delete
+- `GET /api/v1/posts` - list posts (soft-deleted posts excluded automatically)
+- `DELETE /api/v1/posts/{id}` - soft-delete (sets `deleted_at`, doesn't remove)
+- `GET /api/v1/users/{id}/posts` - nested route from FK relationship
 - OpenAPI spec at `docs/openapi.yaml`
-- Enum validation: `role` rejects values outside `member`, `moderator`, `admin`
 
-All with zero runtime dependency on kiln. You own the output.
+Relationships in your database automatically become API routes. All with zero runtime dependency on kiln. You own the output.
 
 ## Why kiln?
 
