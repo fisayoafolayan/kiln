@@ -9,12 +9,15 @@
 > Compile your database schema into a production-ready Go API.
 >
 > Eliminate schema drift - your API always matches your schema.
-> No runtime dependency on kiln. No framework lock-in. Delete kiln - your code still compiles.
-> Generated code depends on [bob](https://github.com/stephenafamo/bob) for type-safe query building.
+> Delete kiln - your code still compiles. No framework lock-in.
+>
+> Generated code uses [bob](https://github.com/stephenafamo/bob) for type-safe query building.
+> Bob is the one runtime dependency of the generated output.
 
 ## Table of Contents
 
 - [The Problem](#the-problem)
+  - [Scope](#scope)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
 - [Sample Schema](#sample-schema)
@@ -171,6 +174,17 @@ CREATE TABLE posts (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at   TIMESTAMPTZ           -- nullable = soft delete enabled
+);
+
+CREATE TABLE tags (
+  id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE post_tags (
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  tag_id  UUID NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
+  PRIMARY KEY (post_id, tag_id)
 );
 ```
 
@@ -573,10 +587,10 @@ By default, `kiln generate` handles everything - most projects should use that.
 For teams already using bob's code generation pipeline, kiln is also available
 as a bob plugin. One command generates bob models and kiln's API layer together.
 
-### Install the plugin
+### Install
 
 ```bash
-go get github.com/fisayoafolayan/kiln/plugin@latest
+go get github.com/fisayoafolayan/kiln@latest
 ```
 
 ### Create a custom gen/main.go

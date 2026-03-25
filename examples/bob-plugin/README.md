@@ -22,13 +22,12 @@ Bob reads the schema and generates models. Kiln's plugin receives the parsed sch
 
 ## Using this in your own project
 
-This example uses `replace` directives in `go.mod` to point at the local kiln
-source. In your own project, remove the `replace` lines and use real versions:
-
 ```bash
-go get github.com/fisayoafolayan/kiln/plugin@latest
+go get github.com/fisayoafolayan/kiln@latest
 go get github.com/stephenafamo/bob@latest
 ```
+
+The plugin is part of the main kiln module — no separate dependency needed.
 
 ## Setup (running this example locally)
 

@@ -2,7 +2,9 @@
 
 **Compile your database schema into a production-ready Go API.**
 
-Eliminate schema drift - your API always matches your schema. No runtime dependency on kiln. No framework lock-in. Delete kiln - your code still compiles. Generated code depends on [bob](https://github.com/stephenafamo/bob) for type-safe query building.
+Eliminate schema drift - your API always matches your schema. Delete kiln - your code still compiles. No framework lock-in.
+
+Generated code uses [bob](https://github.com/stephenafamo/bob) for type-safe query building. Bob is the one runtime dependency of the generated output.
 
 ## The Problem
 

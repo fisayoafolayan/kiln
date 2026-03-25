@@ -3,7 +3,7 @@ module bob-plugin-example
 go 1.26.1
 
 require (
-	github.com/fisayoafolayan/kiln/plugin v0.1.4
+	github.com/fisayoafolayan/kiln v0.1.4
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/gofrs/uuid/v5 v5.4.0
@@ -18,7 +18,6 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
-	github.com/fisayoafolayan/kiln v0.1.4 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

@@ -19,11 +19,10 @@ the same thing.
 
 ## Install
 
-The plugin is a separate Go module so you can import it without pulling in
-kiln's CLI dependencies:
+The plugin is part of the main kiln module:
 
 ```bash
-go get github.com/fisayoafolayan/kiln/plugin@latest
+go get github.com/fisayoafolayan/kiln@latest
 ```
 
 ## Setup
