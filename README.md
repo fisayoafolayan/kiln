@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fisayoafolayan/kiln)](https://goreportcard.com/report/github.com/fisayoafolayan/kiln)
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
+[![Release](https://img.shields.io/github/v/release/fisayoafolayan/kiln)](https://github.com/fisayoafolayan/kiln/releases)
 
 > Compile your database schema into a production-ready Go API.
 >
@@ -20,6 +21,7 @@
   - [Custom Logic](#custom-logic)
 - [Generated Code Example](#generated-code-example)
 - [Validation](#validation)
+  - [Error Responses](#error-responses)
 - [Database Support](#database-support)
 - [Brownfield Adoption](#brownfield-adoption)
   - [Write-Once Files](#write-once-files)
@@ -31,6 +33,7 @@
   - [Filtering & Sorting](#filtering--sorting)
   - [Enum Validation](#enum-validation)
   - [Soft Deletes](#soft-deletes)
+  - [Authentication](#authentication)
 - [CLI](#cli)
 - [Philosophy](#philosophy)
 - [Contributing](#contributing)
@@ -56,11 +59,25 @@ Schema changes? Regenerate. Your API is correct by construction.
 
 ### Before kiln
 
-You write: structs, validation tags, handlers, router, OpenAPI spec, error handling, pagination, filtering. For every table. Again when the schema changes.
+For every table, you write:
+
+- Structs (response, create request, update request)
+- Validation tags
+- HTTP handlers (list, get, create, update, delete)
+- Router wiring
+- OpenAPI spec
+- Error handling, pagination, filtering
+
+Then do it again when the schema changes.
 
 ### After kiln
 
-You write: the schema. kiln generates everything else.
+You write:
+
+- The database schema
+- `kiln.yaml` (required config, overrides are optional)
+
+kiln generates everything else.
 
 Think of kiln like a compiler: the schema is your source, `kiln generate` is
 the compile step, and the output is a working API. Change the schema, recompile.
@@ -260,6 +277,25 @@ curl -X POST http://localhost:8080/api/v1/users \
 }
 ```
 
+### Error Responses
+
+All generated handlers use consistent error shapes. The error logic lives in
+`helpers.go` (write-once) so you can customize formats, add logging, or
+integrate with your observability stack.
+
+| Scenario | Status | Response |
+|----------|--------|----------|
+| Validation failure | 400 | `{"error": "validation failed", "fields": {"name": "is required"}}` |
+| Malformed JSON | 400 | `{"error": "invalid request body"}` |
+| Body too large | 413 | `{"error": "request body too large"}` |
+| Not found | 404 | `{"error": "user not found"}` |
+| Unique violation | 409 | `{"error": "user already exists"}` |
+| FK violation | 422 | `{"error": "referenced user does not exist"}` |
+| Server error | 500 | `{"error": "internal server error"}` |
+
+Error detection uses database error codes (not string matching) so it works
+correctly across Postgres, MySQL, and SQLite regardless of locale.
+
 ---
 
 ## Database Support
@@ -350,7 +386,13 @@ This is where kiln differs from one-time scaffolding tools. Your schema changes 
 
 ### What happens on regenerate
 
-**Auto-generated files** are updated to match the new schema. Each file has an embedded checksum. If you've edited one, kiln protects your changes:
+**Auto-generated files** are updated to match the new schema. Each file has an
+embedded SHA-256 checksum in a comment on line 2. On regeneration, kiln:
+
+1. Reads the existing file's checksum
+2. Recomputes the hash of the file's current contents
+3. If they differ (you edited the file), **skips it** with a warning
+4. If they match (untouched), overwrites with the new version
 
 ```
   ⚠ SKIPPED  generated/store/users.go (user-modified; use --force to overwrite)
@@ -359,6 +401,10 @@ This is where kiln differs from one-time scaffolding tools. Your schema changes 
   ✓ generated/router.go
   ✓ docs/openapi.yaml
 ```
+
+Any content change counts as a modification — even a comment or whitespace.
+`--force` overrides the check and regenerates everything. There is no undo,
+so use `kiln diff` first to review what would change.
 
 **Write-once files** (mappers, helpers, main.go) are never touched. You update those manually when needed.
 
@@ -387,10 +433,27 @@ No files written. No risk. See exactly what kiln would generate, then decide.
 
 | Command | Use when |
 |---------|----------|
-| `kiln diff` | Preview what would change before writing |
+| `kiln diff` | Preview what would be generated (no files written) |
 | `kiln generate` | Regenerate, skip edited files |
 | `kiln generate --force` | Overwrite everything, including edits |
 | `kiln generate --table users` | Regenerate only one table |
+
+### Example: adding a column end-to-end
+
+```bash
+# 1. Add the column to your database
+psql "$DATABASE_URL" -c "ALTER TABLE users ADD COLUMN avatar_url TEXT;"
+
+# 2. Regenerate
+kiln generate
+
+# 3. Commit
+git add -A && git commit -m "add avatar_url to users"
+```
+
+kiln updates the response struct, create/update requests, store queries,
+handler filters, and OpenAPI spec. One migration, one command, everything
+in sync.
 
 ### Why this matters
 
@@ -503,11 +566,11 @@ api:
 
 auth:
   strategy: none                # none | jwt | api_key
-  header: Authorization         # header to read credentials from
+  header: Authorization         # header to read (X-API-Key for api_key strategy)
 
 bob:
-  enabled: true                 # set to false to skip schema introspection
-  models_dir: "./models"        # where bob writes its models
+  enabled: true                 # false = skip DB introspection, use existing models
+  models_dir: "./models"        # where bob writes its query builder models
 
 generate:                       # toggle individual layers for brownfield adoption
   models: true
@@ -631,6 +694,32 @@ No config needed. Kiln detects `deleted_at` and:
 - **UPDATE** prevents modifying soft-deleted records
 - **Response types** exclude the `deleted_at` field (it's internal)
 
+### Authentication
+
+Set `strategy: api_key` or `strategy: jwt` in kiln.yaml. kiln generates a
+write-once middleware file at `generated/auth/middleware.go` with a skeleton
+you fill in:
+
+```go
+// generated/auth/middleware.go - THIS FILE IS YOURS
+func Middleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        key := r.Header.Get("X-API-Key")
+        if key == "" {
+            writeError(w, http.StatusUnauthorized, "missing api key")
+            return
+        }
+        // TODO: validate the key against your database or config
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+kiln deliberately does not generate token validation, secret management, or
+JWT parsing. These are application-specific. The middleware gives you the
+hook point — you add your logic. This is consistent with kiln's philosophy:
+generate the structure, you own the decisions.
+
 ---
 
 ## CLI
@@ -640,15 +729,17 @@ kiln init                  Create kiln.yaml interactively
 kiln generate              Generate your API (runs schema introspection first)
 kiln generate --table X    Regenerate only one table (useful for large schemas)
 kiln generate --no-bob     Skip schema reading, use existing models
-kiln generate --dry-run    Preview changes without writing files
 kiln generate --force      Overwrite files even if they have been manually edited
-kiln diff                  Preview what would be generated without writing files
+kiln diff                  Preview what would be generated (no files written)
 kiln introspect            Print the parsed schema (text format)
 kiln introspect --format json   Print as JSON (for scripting)
 kiln version               Print kiln version
 ```
 
 All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
+
+Running `kiln generate` without a `kiln.yaml` file will fail with a clear
+error pointing you to `kiln init`.
 
 ---
 
@@ -669,15 +760,26 @@ All commands accept `--config path/to/kiln.yaml` (default: `kiln.yaml`).
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
 
-### Where kiln is not a good fit
+### When to use kiln — and when to outgrow it
 
-kiln works best for CRUD-heavy APIs. It may not be the right tool if:
+kiln works best for CRUD-heavy APIs where the database schema drives the domain.
 
-- Your API is workflow-driven (payments, state machines, multi-step processes)
-- You rely on complex joins or hand-tuned SQL queries
-- Your schema is not the source of truth for your domain
+**Use kiln fully** when your API is mostly resource endpoints — list, create,
+read, update, delete. Internal tools, admin panels, B2B APIs.
 
-For these cases, kiln can still generate the boilerplate layers (models, OpenAPI) while you write the rest by hand.
+**Use kiln partially** when some tables are CRUD and others need custom logic.
+Generate models and OpenAPI for everything, handlers for the simple tables,
+and write your own for the complex ones:
+
+```yaml
+overrides:
+  payments:
+    disable: [create, update, delete]  # kiln generates list/get, you handle mutations
+```
+
+**Reach for something else** when the schema isn't the source of truth — workflow
+engines, event-driven systems, or APIs where business rules define the shape
+more than the database does.
 
 ---
 
@@ -704,10 +806,19 @@ The e2e tests spin up Docker containers automatically - no manual database
 setup required.
 
 When adding a new feature:
-1. Update the relevant generator in `internal/generator/`
-2. Add tests in `internal/generator/generator_test.go`
-3. Run `make e2e/postgres` to verify end to end
-4. Open a PR with a clear description of what changed and why
+
+1. Update the relevant generator in `internal/generator/`:
+   - `types/` - generates `generated/models/` (request/response structs)
+   - `store/` - generates `generated/store/` and `generated/store/mappers/`
+   - `handlers/` - generates `generated/handlers/` and `helpers.go`
+   - `router/` - generates `generated/router.go`
+   - `openapi/` - generates `docs/openapi.yaml`
+   - `auth/` - generates `generated/auth/middleware.go`
+   - `mainfile/` - generates `cmd/server/main.go`
+2. Add unit tests in the generator's package or `internal/generator/generator_test.go`
+3. Add parser tests in `internal/parser/bob/bob_test.go` if changing type resolution
+4. Run `make e2e/postgres` to verify end to end
+5. Open a PR with a clear description of what changed and why
 
 ---
 
@@ -729,11 +840,13 @@ When adding a new feature:
 - [x] Checksum-based regeneration safety
 - [x] Locale-independent database error classification
 
-**Up next:**
+**Next:**
 - [ ] Composite PK link/unlink endpoints (many-to-many)
 - [ ] Cursor-based pagination
-- [ ] Gin framework support
 - [ ] Relationship loading (`?include=author`)
+
+**Later:**
+- [ ] Gin framework support
 - [ ] Transaction support in store
 - [ ] Batch create/update/delete endpoints
 - [ ] Test scaffolding (generated test helpers and fixtures)

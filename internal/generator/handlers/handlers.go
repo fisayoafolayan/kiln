@@ -236,7 +236,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 {{if or (filterNeedsStrconv .FilterableCols) (not (pkIsStringLike .Table))}}	"strconv"
 {{end}}{{if .SortableCols}}	"strings"

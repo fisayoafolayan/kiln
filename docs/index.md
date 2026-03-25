@@ -79,15 +79,15 @@ kiln is the only tool that goes from database schema to **runnable REST API** in
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
 
-### Where kiln is not a good fit
+### When to use kiln - and when to outgrow it
 
-kiln works best for CRUD-heavy APIs. It may not be the right tool if:
+**Use kiln fully** for CRUD-heavy APIs - internal tools, admin panels, B2B APIs.
 
-- Your API is workflow-driven (payments, state machines, multi-step processes)
-- You rely on complex joins or hand-tuned SQL queries
-- Your schema is not the source of truth for your domain
+**Use kiln partially** when some tables need custom logic. Generate models and
+OpenAPI for everything, handlers for the simple tables, write your own for the rest.
 
-For these cases, kiln can still generate the boilerplate layers (models, OpenAPI) while you write the rest by hand.
+**Reach for something else** when the schema isn't the source of truth - workflow
+engines, event-driven systems, or APIs shaped by business rules more than tables.
 
 ## Schema Evolution
 
