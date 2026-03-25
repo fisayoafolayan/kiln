@@ -126,7 +126,7 @@ needs when you run `kiln generate`.
 ```bash
 go install github.com/fisayoafolayan/kiln/cmd/kiln@latest
 
-kiln init        # 4 questions, done
+kiln init        # interactive setup, done in seconds
 kiln generate    # generates your full API
 go run cmd/server/main.go
 ```
@@ -134,8 +134,8 @@ go run cmd/server/main.go
 ### Try the example
 
 ```bash
-git clone https://github.com/fisayoafolayan/kiln.git
-cd kiln/examples/blog-api
+git clone https://github.com/fisayoafolayan/demo-blog-api.git
+cd demo-blog-api
 cp .env.example .env
 make setup && make run
 
@@ -143,7 +143,7 @@ make setup && make run
 curl http://localhost:8080/api/v1/users | jq
 ```
 
-See the [blog API example](examples/blog-api/) for the full walkthrough.
+See the [Blog API demo](https://github.com/fisayoafolayan/demo-blog-api) for the full walkthrough.
 
 ---
 
@@ -646,6 +646,8 @@ introspection, and kiln generates the same output as `kiln generate`.
 
 For the full guide including MySQL/SQLite setup and plugin options, see the
 [Bob Plugin Mode documentation](https://kiln.fisayoafolayan.com/guides/bob-plugin/).
+For a complete working example, see the
+[Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker).
 
 ---
 

@@ -140,3 +140,7 @@ The rest of the setup is the same.
 
 Both produce identical output. The plugin just changes how bob and kiln are
 orchestrated.
+
+## Example
+
+See the [Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker) for a complete working example using kiln as a bob plugin.

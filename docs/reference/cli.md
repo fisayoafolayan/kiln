@@ -4,7 +4,7 @@
 
 ### `kiln init`
 
-Create `kiln.yaml` interactively. Asks 4 questions: database driver, DSN, output directory, and API base path.
+Create `kiln.yaml` interactively. Asks for database driver, DSN, output directory, and API base path.
 
 ```bash
 kiln init
@@ -18,7 +18,6 @@ Generate your API from the database schema. Reads `kiln.yaml`, introspects the d
 kiln generate
 kiln generate --table users    # only regenerate one table
 kiln generate --no-bob         # skip schema reading, use existing models
-kiln generate --dry-run        # preview changes without writing files
 kiln generate --force          # overwrite files even if manually edited
 ```
 
@@ -26,7 +25,6 @@ kiln generate --force          # overwrite files even if manually edited
 |------|--------|
 | `--table X` | Only regenerate a specific table |
 | `--no-bob` | Skip schema introspection, use existing bob models |
-| `--dry-run` | Print what would be generated without writing |
 | `--force` | Overwrite user-modified files |
 
 ### `kiln diff`

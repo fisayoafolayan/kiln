@@ -46,7 +46,7 @@ export DATABASE_URL="postgres://app:app@localhost:5432/app?sslmode=disable"
 kiln init
 ```
 
-kiln asks 4 questions:
+kiln asks a few questions:
 
 ```
 Database driver (postgres/mysql/sqlite): postgres
@@ -108,4 +108,4 @@ curl "http://localhost:8080/api/v1/users?sort=-created_at" | jq
 
 - [Configuration](configuration.md) - customize fields, auth, enums, and more
 - [Features](features/filtering.md) - filtering, sorting, soft deletes, enums
-- [Example Project](https://github.com/fisayoafolayan/kiln/tree/main/examples/blog-api) - a complete blog API
+- [Example Project](https://github.com/fisayoafolayan/demo-blog-api) - a complete blog API

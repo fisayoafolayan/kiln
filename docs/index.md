@@ -110,4 +110,4 @@ Edited files are protected by checksums. Write-once files are never touched. See
 - [Schema Evolution](guides/schema-changes.md) - how kiln handles schema changes
 - [API Evolution](guides/api-evolution.md) - versioning, deprecation, breaking changes
 - [Escape Hatches](guides/escape-hatches.md) - transactions, custom handlers, mixing generated and hand-written code
-- [Example Project](https://github.com/fisayoafolayan/kiln/tree/main/examples/blog-api) - a complete blog API you can clone and run
+- [Example Project](https://github.com/fisayoafolayan/demo-blog-api) - a complete blog API you can clone and run
