@@ -20,6 +20,7 @@
   - [Scope](#scope)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
+- [Examples](#examples)
 - [Sample Schema](#sample-schema)
 - [What Gets Generated](#what-gets-generated)
   - [Custom Logic](#custom-logic)
@@ -144,6 +145,15 @@ curl http://localhost:8080/api/v1/users | jq
 ```
 
 See the [Blog API demo](https://github.com/fisayoafolayan/demo-blog-api) for the full walkthrough.
+
+---
+
+## Examples
+
+| Example | Description |
+|---------|-------------|
+| [Blog API](https://github.com/fisayoafolayan/demo-blog-api) | Full CRUD API with filtering, soft deletes, M2M, enums |
+| [Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker) | Bob plugin mode example |
 
 ---
 
