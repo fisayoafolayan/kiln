@@ -12,7 +12,7 @@ import (
 	"github.com/fisayoafolayan/kiln/internal/ir"
 )
 
-// Generator writes generated/router.go — a single file that registers
+// Generator writes generated/router.go - a single file that registers
 // all routes for all tables onto an http.ServeMux.
 type Generator struct {
 	opts genopt.Options
@@ -98,7 +98,7 @@ func (g *Generator) templateData() templateData {
 		if !g.opts.Config.ShouldGenerateTable(t.Name) {
 			continue
 		}
-		if t.PrimaryKey == nil {
+		if !t.HasPK() || t.HasCompositePK() {
 			continue
 		}
 
@@ -164,6 +164,40 @@ func (g *Generator) templateData() templateData {
 				Method:  "GET",
 				Path:    fmt.Sprintf("%s/%s/{id}/%s", base, parentEndpoint, endpoint),
 				Handler: fmt.Sprintf("%s.ListBy%s", handlerVar, parentTable.GoName()),
+			})
+		}
+
+		// M2M link/unlink/list routes
+		for _, m2m := range t.ManyToMany {
+			targetEndpoint := m2m.TargetTable.Endpoint()
+			targetOverride := g.opts.Config.OverrideFor(m2m.TargetTable.Name)
+			if targetOverride.Endpoint != "" {
+				targetEndpoint = targetOverride.Endpoint
+			}
+
+			// Compute target param name: e.g. "tagId"
+			targetGoName := m2m.TargetTable.GoName()
+			targetParamName := strings.ToLower(targetGoName[:1]) + targetGoName[1:] + "Id"
+
+			if !override.IsOperationDisabled("link") {
+				tr.Routes = append(tr.Routes, route{
+					Method:  "POST",
+					Path:    fmt.Sprintf("%s/%s/{id}/%s", base, endpoint, targetEndpoint),
+					Handler: fmt.Sprintf("%s.Link%s", handlerVar, targetGoName),
+				})
+			}
+			if !override.IsOperationDisabled("unlink") {
+				tr.Routes = append(tr.Routes, route{
+					Method:  "DELETE",
+					Path:    fmt.Sprintf("%s/%s/{id}/%s/{%s}", base, endpoint, targetEndpoint, targetParamName),
+					Handler: fmt.Sprintf("%s.Unlink%s", handlerVar, targetGoName),
+				})
+			}
+			// ListLinked - always generated
+			tr.Routes = append(tr.Routes, route{
+				Method:  "GET",
+				Path:    fmt.Sprintf("%s/%s/{id}/%s", base, endpoint, targetEndpoint),
+				Handler: fmt.Sprintf("%s.ListLinked%s", handlerVar, m2m.TargetTable.GoNamePlural()),
 			})
 		}
 

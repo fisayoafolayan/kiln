@@ -2,7 +2,7 @@
 
 **Compile your database schema into a production-ready Go API.**
 
-Eliminate schema drift - your API always matches your schema. Zero runtime dependency. No framework lock-in. Delete kiln - your code still compiles.
+Eliminate schema drift - your API always matches your schema. No runtime dependency on kiln. No framework lock-in. Delete kiln - your code still compiles. Generated code depends on [bob](https://github.com/stephenafamo/bob) for type-safe query building.
 
 ## The Problem
 
@@ -58,7 +58,7 @@ You immediately get:
 - `GET /api/v1/users/{id}/posts` - nested route from FK relationship
 - OpenAPI spec at `docs/openapi.yaml`
 
-Relationships in your database automatically become API routes. All with zero runtime dependency on kiln. You own the output.
+Relationships in your database automatically become API routes. No runtime dependency on kiln. You own the output.
 
 ## Why kiln?
 
@@ -67,7 +67,7 @@ Relationships in your database automatically become API routes. All with zero ru
 | Input | Hand-written SQL | Go schema DSL | Database schema |
 | Output | Types + query functions | Runtime ORM | Types + store + handlers + router + OpenAPI |
 | You write | SQL + handlers + router | Schema + handlers | kiln.yaml |
-| Runtime dependency | None | ent runtime | None |
+| Runtime dependency | None | ent runtime | bob (query builder) |
 
 kiln is the only tool that goes from database schema to **runnable REST API** in one command, where the output is plain Go you can fork and forget.
 
@@ -106,4 +106,6 @@ Edited files are protected by checksums. Write-once files are never touched. See
 - [Getting Started](getting-started.md) - install and generate your first API
 - [Configuration](configuration.md) - customize what kiln generates
 - [Schema Evolution](guides/schema-changes.md) - how kiln handles schema changes
+- [API Evolution](guides/api-evolution.md) - versioning, deprecation, breaking changes
+- [Escape Hatches](guides/escape-hatches.md) - transactions, custom handlers, mixing generated and hand-written code
 - [Example Project](https://github.com/fisayoafolayan/kiln/tree/main/examples/blog-api) - a complete blog API you can clone and run

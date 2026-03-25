@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/fisayoafolayan/kiln/internal/config"
@@ -92,11 +93,19 @@ type tableData struct {
 	SortableNames []string    // sortable column JSON names
 	// Nested routes from FK relationships
 	NestedRoutes []nestedRoute
+	// M2M link/unlink routes
+	M2MRoutes []m2mRoute
 }
 
 type nestedRoute struct {
 	ParentTable    *ir.Table
 	ParentEndpoint string
+}
+
+type m2mRoute struct {
+	M2M             *ir.ManyToMany
+	TargetEndpoint  string
+	TargetParamName string
 }
 
 type fieldData struct {
@@ -176,6 +185,21 @@ func (g *Generator) templateData() templateData {
 			})
 		}
 
+		for _, m2m := range t.ManyToMany {
+			targetEndpoint := m2m.TargetTable.Endpoint()
+			targetOverride := cfg.OverrideFor(m2m.TargetTable.Name)
+			if targetOverride.Endpoint != "" {
+				targetEndpoint = targetOverride.Endpoint
+			}
+			targetGoName := m2m.TargetTable.GoName()
+			targetParamName := strings.ToLower(targetGoName[:1]) + targetGoName[1:] + "Id"
+			td.M2MRoutes = append(td.M2MRoutes, m2mRoute{
+				M2M:             m2m,
+				TargetEndpoint:  targetEndpoint,
+				TargetParamName: targetParamName,
+			})
+		}
+
 		data.Tables = append(data.Tables, td)
 	}
 
@@ -223,6 +247,12 @@ func goTypeToOAPI(t ir.GoType) (oapiType, oapiFormat string) {
 
 func funcMap() template.FuncMap {
 	return template.FuncMap{
+		"firstPK": func(t *ir.Table) *ir.Column {
+			if len(t.PrimaryKeys) > 0 {
+				return t.PrimaryKeys[0]
+			}
+			return nil
+		},
 		"isOperationEnabled": func(op string, o config.TableOverride) bool {
 			return !o.IsOperationDisabled(op)
 		},
@@ -456,11 +486,88 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 {{end}}
+{{range .M2MRoutes}}
+  {{$.BasePath}}/{{$table.Endpoint}}/{id}/{{.TargetEndpoint}}:
+{{if isOperationEnabled "link" $table.Override}}    post:
+      summary: Link {{.M2M.TargetTable.GoName}} to {{$table.Table.GoName}}
+      operationId: link{{.M2M.TargetTable.GoName}}To{{$table.Table.GoName}}
+      tags: [{{$table.Table.GoName}}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Link{{.M2M.TargetTable.GoName}}To{{$table.Table.GoName}}Request"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+{{end}}    get:
+      summary: List {{.M2M.TargetTable.GoNamePlural}} linked to {{$table.Table.GoName}}
+      operationId: listLinked{{.M2M.TargetTable.GoNamePlural}}For{{$table.Table.GoName}}
+      tags: [{{$table.Table.GoName}}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/{{.M2M.TargetTable.GoName}}"
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+        "500":
+          $ref: "#/components/responses/InternalError"
+{{if isOperationEnabled "unlink" $table.Override}}
+  {{$.BasePath}}/{{$table.Endpoint}}/{id}/{{.TargetEndpoint}}/{{"{"}}{{.TargetParamName}}{{"}"}}:
+    delete:
+      summary: Unlink {{.M2M.TargetTable.GoName}} from {{$table.Table.GoName}}
+      operationId: unlink{{.M2M.TargetTable.GoName}}From{{$table.Table.GoName}}
+      tags: [{{$table.Table.GoName}}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: {{.TargetParamName}}
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: No Content
+        "500":
+          $ref: "#/components/responses/InternalError"
+{{end}}{{end}}
 {{end}}
 
 components:
   schemas:
-{{range .Tables}}
+{{range .Tables}}{{- $table := . }}
     # {{.Table.GoName}}
     {{.Table.GoName}}:
       type: object
@@ -501,6 +608,15 @@ components:
 {{- end}}
 {{end}}
 
+{{range .M2MRoutes}}{{if isOperationEnabled "link" $table.Override}}    Link{{.M2M.TargetTable.GoName}}To{{$table.Table.GoName}}Request:
+      type: object
+      properties:
+        {{(firstPK .M2M.TargetTable).JSONName}}:
+          type: string
+          format: uuid
+      required:
+        - {{(firstPK .M2M.TargetTable).JSONName}}
+{{end}}{{end}}
 {{end}}
     Error:
       type: object

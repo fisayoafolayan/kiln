@@ -29,7 +29,7 @@ seed: ## Re-apply seed data
 	docker compose exec -T postgres psql -U blog -d blog < seed.sql
 
 clean: ## Remove all generated code (use after changing kiln.yaml)
-	rm -rf generated cmd models factory dbinfo dberrors docs bobgen.yaml
+	rm -rf generated cmd models factory dbinfo dberrors docs
 
 reset: down clean ## Reset everything: stop DB, remove generated code, re-setup
 	docker compose down -v

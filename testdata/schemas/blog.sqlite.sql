@@ -1,4 +1,4 @@
--- Blog schema — SQLite
+-- Blog schema - SQLite
 -- Uses: TEXT for UUIDs (SQLite has no UUID type), DATETIME
 
 DROP TABLE IF EXISTS post_tags;
@@ -42,14 +42,14 @@ CREATE TABLE tags (
                       name TEXT NOT NULL UNIQUE
 );
 
--- Composite PK — kiln skips this table in v1
+-- Composite PK - kiln skips this table in v1
 CREATE TABLE post_tags (
                            post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
                            tag_id  TEXT NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
                            PRIMARY KEY (post_id, tag_id)
 );
 
--- SQLite doesn't fire updated_at automatically — use a trigger instead
+-- SQLite doesn't fire updated_at automatically - use a trigger instead
 CREATE TRIGGER users_updated_at
     AFTER UPDATE ON users
     FOR EACH ROW

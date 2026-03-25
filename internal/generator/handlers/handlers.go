@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/fisayoafolayan/kiln/internal/config"
@@ -40,7 +41,7 @@ func (g *Generator) Run() ([]string, error) {
 		if !g.opts.Config.ShouldGenerateTable(t.Name) {
 			continue
 		}
-		if t.PrimaryKey == nil {
+		if !t.HasPK() || t.HasCompositePK() {
 			continue
 		}
 		path, err := g.writeTable(t, outDir)
@@ -50,7 +51,7 @@ func (g *Generator) Run() ([]string, error) {
 		written = append(written, path)
 	}
 
-	// Write shared helper file — write-once
+	// Write shared helper file - write-once
 	helpersPath, skipped, err := g.writeHelpers(outDir)
 	if err != nil {
 		return nil, err
@@ -197,26 +198,48 @@ func funcMap() template.FuncMap {
 					return true
 				}
 			}
+			for _, m2m := range t.ManyToMany {
+				if m2m.TargetTable.PKTypeName() == "uuid.UUID" {
+					return true
+				}
+			}
 			return false
+		},
+		"firstPK": func(t *ir.Table) *ir.Column {
+			if len(t.PrimaryKeys) > 0 {
+				return t.PrimaryKeys[0]
+			}
+			return nil
+		},
+		"m2mTargetParamName": func(m2m *ir.ManyToMany) string {
+			// e.g. "tags" → "tagId"
+			singular := m2m.TargetTable.GoName()
+			if len(singular) == 0 {
+				return "targetId"
+			}
+			return strings.ToLower(singular[:1]) + singular[1:] + "Id"
 		},
 		// filterParseSnippet returns the Go code to parse a query param value
 		// into a pointer of the column's Go type and assign it to a target variable.
-		"filterParseSnippet": func(c *ir.Column, target string) string {
+		// filterParseSnippet returns the Go code to parse a query param value
+		// into a pointer of the column's Go type and assign it to a target variable.
+		// Returns a 400 error to the client if the value cannot be parsed.
+		"filterParseSnippet": func(c *ir.Column, target string, paramName string) string {
 			switch c.GoType.Name {
 			case "string":
 				return "{ val := v; " + target + " = &val }"
 			case "uuid.UUID":
-				return "if parsed, err := uuid.FromString(v); err == nil { " + target + " = &parsed }"
+				return "if parsed, err := uuid.FromString(v); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + "\"); return } else { " + target + " = &parsed }"
 			case "int32":
-				return "if n, err := strconv.ParseInt(v, 10, 32); err == nil { val := int32(n); " + target + " = &val }"
+				return "if n, err := strconv.ParseInt(v, 10, 32); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + "\"); return } else { val := int32(n); " + target + " = &val }"
 			case "int64":
-				return "if n, err := strconv.ParseInt(v, 10, 64); err == nil { " + target + " = &n }"
+				return "if n, err := strconv.ParseInt(v, 10, 64); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + "\"); return } else { " + target + " = &n }"
 			case "float64":
-				return "if n, err := strconv.ParseFloat(v, 64); err == nil { " + target + " = &n }"
+				return "if n, err := strconv.ParseFloat(v, 64); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + "\"); return } else { " + target + " = &n }"
 			case "bool":
-				return "if b, err := strconv.ParseBool(v); err == nil { " + target + " = &b }"
+				return "if b, err := strconv.ParseBool(v); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + "\"); return } else { " + target + " = &b }"
 			case "time.Time":
-				return "if t, err := time.Parse(time.RFC3339, v); err == nil { " + target + " = &t }"
+				return "if t, err := time.Parse(time.RFC3339, v); err != nil { writeError(w, http.StatusBadRequest, \"invalid value for " + paramName + ": expected RFC3339 format\"); return } else { " + target + " = &t }"
 			default:
 				return "// unsupported filter type: " + c.GoType.Name
 			}
@@ -254,6 +277,9 @@ type {{.Table.GoName}}Store interface {
 {{end}}{{if isOperationEnabled "update" .Override}}	Update(ctx context.Context, id {{.Table.PKTypeName}}, req models.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error)
 {{end}}{{if isOperationEnabled "delete" .Override}}	Delete(ctx context.Context, id {{.Table.PKTypeName}}) error
 {{end}}{{range .ForeignKeys}}	ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]models.{{$.Table.GoName}}, int, error)
+{{end}}{{range .Table.ManyToMany}}{{if isOperationEnabled "link" $.Override}}	Link{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, req models.Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request) error
+{{end}}{{if isOperationEnabled "unlink" $.Override}}	Unlink{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, targetID {{.TargetTable.PKTypeName}}) error
+{{end}}	ListLinked{{.TargetTable.GoNamePlural}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, page, pageSize int) ([]models.{{.TargetTable.GoName}}, int, error)
 {{end}}}
 
 // {{.Table.GoName}}Handler handles HTTP requests for {{.Table.Name}}.
@@ -267,7 +293,7 @@ func New{{.Table.GoName}}Handler(store {{.Table.GoName}}Store) *{{.Table.GoName}
 }
 
 {{if isOperationEnabled "get" .Override}}
-// Get handles GET /{{.Table.Endpoint}}/{id}
+// Get handles GET /{{.Table.Endpoint}}/...
 func (h *{{.Table.GoName}}Handler) Get(w http.ResponseWriter, r *http.Request) {
 	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
 	if idStr == "" {
@@ -309,30 +335,36 @@ func (h *{{.Table.GoName}}Handler) List(w http.ResponseWriter, r *http.Request) 
 	filter := store.{{.Table.GoName}}ListFilter{}
 
 {{range .FilterableCols}}	if v := q.Get("{{.Name}}"); v != "" {
-		{{filterParseSnippet . (printf "filter.%s" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%s" .GoName) .Name}}
 	}
 	if v := q.Get("{{.Name}}[neq]"); v != "" {
-		{{filterParseSnippet . (printf "filter.%sNeq" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%sNeq" .GoName) (printf "%s[neq]" .Name)}}
 	}
 {{if needsRangeOps .GoType}}	if v := q.Get("{{.Name}}[gt]"); v != "" {
-		{{filterParseSnippet . (printf "filter.%sGt" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%sGt" .GoName) (printf "%s[gt]" .Name)}}
 	}
 	if v := q.Get("{{.Name}}[gte]"); v != "" {
-		{{filterParseSnippet . (printf "filter.%sGte" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%sGte" .GoName) (printf "%s[gte]" .Name)}}
 	}
 	if v := q.Get("{{.Name}}[lt]"); v != "" {
-		{{filterParseSnippet . (printf "filter.%sLt" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%sLt" .GoName) (printf "%s[lt]" .Name)}}
 	}
 	if v := q.Get("{{.Name}}[lte]"); v != "" {
-		{{filterParseSnippet . (printf "filter.%sLte" .GoName)}}
+		{{filterParseSnippet . (printf "filter.%sLte" .GoName) (printf "%s[lte]" .Name)}}
 	}
 {{end}}{{end}}
 {{if .SortableCols}}	if sortParam := q.Get("sort"); sortParam != "" {
-		if strings.HasPrefix(sortParam, "-") {
-			filter.SortBy = sortParam[1:]
+		field := sortParam
+		if strings.HasPrefix(field, "-") {
+			field = field[1:]
 			filter.SortDesc = true
-		} else {
-			filter.SortBy = sortParam
+		}
+		switch field {
+{{range .SortableCols}}		case "{{.Name}}":
+{{end}}			filter.SortBy = field
+		default:
+			writeError(w, http.StatusBadRequest, "invalid sort field: "+field)
+			return
 		}
 	}
 {{end}}
@@ -370,7 +402,7 @@ func (h *{{.Table.GoName}}Handler) Create(w http.ResponseWriter, r *http.Request
 {{end}}
 
 {{if isOperationEnabled "update" .Override}}
-// Update handles PATCH /{{.Table.Endpoint}}/{id}
+// Update handles PATCH /{{.Table.Endpoint}}/...
 func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request) {
 	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
 	if idStr == "" {
@@ -412,7 +444,7 @@ func (h *{{.Table.GoName}}Handler) Update(w http.ResponseWriter, r *http.Request
 {{end}}
 
 {{if isOperationEnabled "delete" .Override}}
-// Delete handles DELETE /{{.Table.Endpoint}}/{id}
+// Delete handles DELETE /{{.Table.Endpoint}}/...
 func (h *{{.Table.GoName}}Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	{{if pkIsUUID .Table}}idStr := r.PathValue("id")
 	if idStr == "" {
@@ -486,10 +518,153 @@ func (h *{{$.Table.GoName}}Handler) ListBy{{.TargetTable.GoName}}(w http.Respons
 	})
 }
 {{end}}
+
+{{range .Table.ManyToMany}}
+{{if isOperationEnabled "link" $.Override}}
+// Link{{.TargetTable.GoName}} handles POST /{{$.Table.Endpoint}}/{id}/{{.TargetTable.Endpoint}}
+func (h *{{$.Table.GoName}}Handler) Link{{.TargetTable.GoName}}(w http.ResponseWriter, r *http.Request) {
+	{{if pkIsUUID $.Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	sourceID, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike $.Table}}sourceID := r.PathValue("id")
+	if sourceID == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	idVal, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sourceID := {{$.Table.PKTypeName}}(idVal){{end}}
+	var req models.Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if !validateRequest(w, req) {
+		return
+	}
+	if err {{if pkIsStringLike $.Table}}:{{end}}= h.store.Link{{.TargetTable.GoName}}(r.Context(), sourceID, req); err != nil {
+		handleStoreError(w, err, "{{$.Table.Name}}", "link")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+{{end}}
+
+{{if isOperationEnabled "unlink" $.Override}}
+// Unlink{{.TargetTable.GoName}} handles DELETE /{{$.Table.Endpoint}}/{id}/{{.TargetTable.Endpoint}}/{` + "`" + `{{m2mTargetParamName .}}` + "`" + `}
+func (h *{{$.Table.GoName}}Handler) Unlink{{.TargetTable.GoName}}(w http.ResponseWriter, r *http.Request) {
+	{{if pkIsUUID $.Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	sourceID, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike $.Table}}sourceID := r.PathValue("id")
+	if sourceID == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	idVal, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sourceID := {{$.Table.PKTypeName}}(idVal){{end}}
+	{{if .TargetTable.PKIsUUID}}targetIDStr := r.PathValue("{{m2mTargetParamName .}}")
+	if targetIDStr == "" {
+		writeError(w, http.StatusBadRequest, "missing target id")
+		return
+	}
+	targetID, errTarget := uuid.FromString(targetIDStr)
+	if errTarget != nil {
+		writeError(w, http.StatusBadRequest, "invalid target id")
+		return
+	}{{else if .TargetTable.PKIsStringLike}}targetID := r.PathValue("{{m2mTargetParamName .}}")
+	if targetID == "" {
+		writeError(w, http.StatusBadRequest, "missing target id")
+		return
+	}{{else}}targetIDStr := r.PathValue("{{m2mTargetParamName .}}")
+	if targetIDStr == "" {
+		writeError(w, http.StatusBadRequest, "missing target id")
+		return
+	}
+	targetIDVal, errTarget := strconv.ParseInt(targetIDStr, 10, 64)
+	if errTarget != nil {
+		writeError(w, http.StatusBadRequest, "invalid target id")
+		return
+	}
+	targetID := {{.TargetTable.PKTypeName}}(targetIDVal){{end}}
+	if unlinkErr := h.store.Unlink{{.TargetTable.GoName}}(r.Context(), sourceID, targetID); unlinkErr != nil {
+		handleStoreError(w, unlinkErr, "{{$.Table.Name}}", "unlink")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+{{end}}
+
+// ListLinked{{.TargetTable.GoNamePlural}} handles GET /{{$.Table.Endpoint}}/{id}/{{.TargetTable.Endpoint}}
+func (h *{{$.Table.GoName}}Handler) ListLinked{{.TargetTable.GoNamePlural}}(w http.ResponseWriter, r *http.Request) {
+	{{if pkIsUUID $.Table}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	sourceID, err := uuid.FromString(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}{{else if pkIsStringLike $.Table}}sourceID := r.PathValue("id")
+	if sourceID == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}{{else}}idStr := r.PathValue("id")
+	if idStr == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	idVal, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sourceID := {{$.Table.PKTypeName}}(idVal){{end}}
+	page, pageSize := parsePagination(r)
+	rows, total, err {{if pkIsStringLike $.Table}}:{{end}}= h.store.ListLinked{{.TargetTable.GoNamePlural}}(r.Context(), sourceID, page, pageSize)
+	if err != nil {
+		handleStoreError(w, err, "{{$.Table.Name}}", "list")
+		return
+	}
+	writeJSON(w, http.StatusOK, models.List{{.TargetTable.GoNamePlural}}Response{
+		Data:     rows,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	})
+}
+{{end}}
 `
 
 // ---------------------------------------------------------------------------
-// Helpers template — written once, yours to customise
+// Helpers template - written once, yours to customise
 // ---------------------------------------------------------------------------
 
 const helpersTemplate = `// Generated by kiln on first run. THIS FILE IS YOURS.
@@ -575,7 +750,7 @@ func handleStoreError(w http.ResponseWriter, err error, entity, operation string
 		return
 	}
 
-	// Not found — bob/sql returns sql.ErrNoRows from .One()
+	// Not found - bob/sql returns sql.ErrNoRows from .One()
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, entity+" not found")
 		return

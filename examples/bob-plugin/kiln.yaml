@@ -1,0 +1,29 @@
+version: 1
+
+database:
+  driver: "postgres"
+
+output:
+  dir: "./generated"
+  package: generated
+
+api:
+  base_path: "/api/v1"
+  framework: chi
+
+bob:
+  enabled: false
+  models_dir: "./models"
+
+generate:
+  models: true
+  store: true
+  handlers: true
+  router: true
+  openapi: true
+
+openapi:
+  enabled: true
+  output: "./docs/openapi.yaml"
+  title: "Task API"
+  version: "1.0.0"

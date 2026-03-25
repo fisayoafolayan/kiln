@@ -21,9 +21,10 @@ type Config struct {
 	Generate GenerateConfig `yaml:"generate"`
 	Auth     AuthConfig     `yaml:"auth"`
 	OpenAPI  OpenAPIConfig  `yaml:"openapi"`
-	Tests    TestsConfig    `yaml:"tests"`
 	// Per-table overrides keyed by table name.
 	Overrides map[string]TableOverride `yaml:"overrides"`
+
+	pluginMode bool // true when loaded via LoadForPlugin (skips DSN validation)
 }
 
 type DatabaseConfig struct {
@@ -125,11 +126,6 @@ type OpenAPIConfig struct {
 	Description string `yaml:"description"`
 }
 
-type TestsConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	DSNEnv  string `yaml:"db_dsn_env"`
-}
-
 // TableOverride holds per-table customisations.
 type TableOverride struct {
 	Endpoint         string              `yaml:"endpoint"`          // override the URL path segment
@@ -149,7 +145,7 @@ type TableOverride struct {
 }
 
 // IsOperationDisabled returns true if the given operation is disabled
-// for this table. op should be one of: create, update, delete, list, get.
+// for this table. op should be one of: create, update, delete, list, get, link, unlink.
 func (o TableOverride) IsOperationDisabled(op string) bool {
 	return o.disableSet[strings.ToLower(op)]
 }
@@ -212,6 +208,36 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
 
+	cfg.applyDefaults()
+	cfg.buildLookups()
+
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// LoadForPlugin loads config without requiring database DSN fields.
+// Used when kiln runs as a bob plugin - bob handles the database connection.
+func LoadForPlugin(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf(
+				"config file not found at %q - run `kiln init` to create one",
+				path,
+			)
+		}
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing config file: %w", err)
+	}
+
+	cfg.pluginMode = true
 	cfg.applyDefaults()
 	cfg.buildLookups()
 
@@ -297,13 +323,13 @@ func (c *Config) validate() error {
 	}
 	if !validDrivers[c.Database.Driver] {
 		errs = append(errs, fmt.Sprintf(
-			"database.driver %q is invalid — must be one of: postgres, mysql, sqlite",
+			"database.driver %q is invalid - must be one of: postgres, mysql, sqlite",
 			c.Database.Driver,
 		))
 	}
 
-	// DSN presence check (not format — that's validated at connection time)
-	if c.Database.DSN == "" && c.Database.DSNEnv == "" {
+	// DSN presence check (skipped in plugin mode - bob handles the connection)
+	if !c.pluginMode && c.Database.DSN == "" && c.Database.DSNEnv == "" {
 		errs = append(errs, "database.dsn or database.dsn_env is required")
 	}
 
@@ -315,7 +341,7 @@ func (c *Config) validate() error {
 	}
 	if !validFrameworks[c.API.Framework] {
 		errs = append(errs, fmt.Sprintf(
-			"api.framework %q is invalid — must be one of: stdlib, chi, gin",
+			"api.framework %q is invalid - must be one of: stdlib, chi, gin",
 			c.API.Framework,
 		))
 	}
@@ -328,7 +354,7 @@ func (c *Config) validate() error {
 	}
 	if !validStrategies[c.Auth.Strategy] {
 		errs = append(errs, fmt.Sprintf(
-			"auth.strategy %q is invalid — must be one of: none, jwt, api_key",
+			"auth.strategy %q is invalid - must be one of: none, jwt, api_key",
 			c.Auth.Strategy,
 		))
 	}

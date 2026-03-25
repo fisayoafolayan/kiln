@@ -47,11 +47,15 @@ nav:
     - Enum Validation: features/enums.md
     - Soft Deletes: features/soft-deletes.md
     - Authentication: features/auth.md
+    - Many-to-Many: features/many-to-many.md
     - Chi Router: features/chi.md
   - Guides:
     - Schema Evolution: guides/schema-changes.md
+    - API Evolution: guides/api-evolution.md
+    - Escape Hatches: guides/escape-hatches.md
     - Testing: guides/testing.md
     - Brownfield Adoption: guides/brownfield.md
+    - Bob Plugin Mode: guides/bob-plugin.md
   - Reference:
     - CLI: reference/cli.md
     - Generated Files: reference/generated-files.md

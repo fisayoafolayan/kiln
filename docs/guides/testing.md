@@ -44,7 +44,8 @@ func TestGetUser(t *testing.T) {
 
 ## Testing Store Methods
 
-Store methods are single-query functions that work against any `bob.DB`. Use a real test database:
+Store constructors accept `bob.Executor`, which both `bob.DB` and `bob.Tx` satisfy.
+This means you can pass a transaction directly for test isolation. Use a real test database:
 
 ```go
 package store_test

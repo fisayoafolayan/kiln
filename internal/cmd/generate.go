@@ -1,21 +1,29 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"os/signal"
 
+	"github.com/fisayoafolayan/kiln/internal/bobadapter"
 	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/fisayoafolayan/kiln/internal/generator"
 	"github.com/spf13/cobra"
+	"github.com/stephenafamo/bob/gen"
+	"github.com/stephenafamo/bob/gen/drivers"
+	"github.com/stephenafamo/bob/gen/plugins"
+
+	mysqldriver "github.com/stephenafamo/bob/gen/bobgen-mysql/driver"
+	psqldriver "github.com/stephenafamo/bob/gen/bobgen-psql/driver"
+	sqlitedriver "github.com/stephenafamo/bob/gen/bobgen-sqlite/driver"
 )
 
 func generateCmd() *cobra.Command {
 	var (
-		table  string
-		noBob  bool
-		dryRun bool
-		force  bool
+		table string
+		noBob bool
+		force bool
 	)
 
 	cmd := &cobra.Command{
@@ -23,7 +31,7 @@ func generateCmd() *cobra.Command {
 		Short: "Generate Go code from your database schema",
 		Long: `Generates your full API layer from the database schema.
 
-kiln reads your database schema then generates types, store,
+kiln reads your database schema then generates models, store,
 handlers, router, and OpenAPI spec.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(cfgFile)
@@ -31,121 +39,137 @@ handlers, router, and OpenAPI spec.`,
 				return err
 			}
 
-			// Step 1 - ensure bob is available, write bobgen.yaml, run schema introspection
 			if cfg.Bob.IsEnabled() && !noBob {
-				if err := ensureBob(cfg.Database.Driver); err != nil {
-					return err
-				}
-				// Write bobgen.yaml if it doesn't exist.
-				if _, err := os.Stat("bobgen.yaml"); os.IsNotExist(err) {
-					dsn, err := cfg.Database.ResolvedDSN()
-					if err != nil {
-						return fmt.Errorf("resolving database DSN: %w", err)
-					}
-					bobConfig := buildBobConfig(cfg.Database.Driver, dsn, cfg.Bob.ModelsDir)
-					if err := os.WriteFile("bobgen.yaml", []byte(bobConfig), 0644); err != nil {
-						return fmt.Errorf("writing bobgen.yaml: %w", err)
-					}
-				}
+				// Normal path: bob reads schema and generates models,
+				// kiln plugin generates the API layer - all in one pass.
 				fmt.Println("  Reading database schema...")
-				if err := runBobGen(cfg.Database.Driver); err != nil {
-					return fmt.Errorf("failed to read schema: %w\n\n"+
+				if err := runBobWithKiln(cfg, table, force); err != nil {
+					return fmt.Errorf("failed: %w\n\n"+
 						"  Make sure your database is running and the DSN in kiln.yaml is correct.", err)
 				}
-				fmt.Println("  ✓ Schema read complete")
-			}
-
-			// Step 2 - parse bob's generated models into kiln IR
-			fmt.Println("  Parsing schema...")
-			schema, err := parseSchemaWithConfig(cfg)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("  ✓ Found %d tables\n", len(schema.Tables))
-
-			// Step 3 — filter to a single table if --table is set
-			if table != "" {
-				schema, err = schema.FilterTable(table)
+			} else {
+				// --no-bob: parse existing bob models, run kiln generators only.
+				fmt.Println("  Parsing existing models...")
+				schema, err := parseBobModels(cfg)
 				if err != nil {
 					return err
 				}
+				if table != "" {
+					schema, err = schema.FilterTable(table)
+					if err != nil {
+						return err
+					}
+				}
+				g := generator.New(cfg, schema)
+				g.SetForce(force)
+				return g.Run(os.Stdout)
 			}
-
-			// Step 4 — run generators
-			g := generator.New(cfg, schema)
-			g.SetForce(force)
-			if dryRun {
-				return g.Diff(os.Stdout)
-			}
-			return g.Run(os.Stdout)
+			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&table, "table", "", "only regenerate a specific table")
 	cmd.Flags().BoolVar(&noBob, "no-bob", false, "skip schema reading, use existing models")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print what would be generated without writing files")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite files even if they have been manually edited")
 
 	return cmd
 }
 
-type bobGen struct {
-	binary string
-	module string
+// kilnPlugin generates the kiln API layer when bob calls PlugDBInfo.
+// Bob reads the schema and generates models; this plugin receives the
+// parsed schema and generates types, store, handlers, router, and OpenAPI.
+type kilnPlugin[T, C, I any] struct {
+	cfg   *config.Config
+	table string
+	force bool
 }
 
-var bobGens = map[string]bobGen{
-	"mysql":  {binary: "bobgen-mysql", module: "github.com/stephenafamo/bob/gen/bobgen-mysql@latest"},
-	"sqlite": {binary: "bobgen-sqlite", module: "github.com/stephenafamo/bob/gen/bobgen-sqlite@latest"},
+func (p *kilnPlugin[T, C, I]) Name() string { return "kiln" }
+
+func (p *kilnPlugin[T, C, I]) PlugDBInfo(info *drivers.DBInfo[T, C, I]) error {
+	driver := bobadapter.DriverFromString(p.cfg.Database.Driver)
+
+	exclude := make(map[string]bool)
+	for _, name := range p.cfg.Tables.Exclude {
+		exclude[name] = true
+	}
+
+	schema := bobadapter.ConvertDBInfo(info, driver, exclude)
+	fmt.Printf("  ✓ Found %d tables\n", len(schema.Tables))
+
+	// Config enum overrides take precedence over auto-detected.
+	for _, t := range schema.Tables {
+		override := p.cfg.OverrideFor(t.Name)
+		for _, c := range t.Columns {
+			if vals := override.EnumValuesFor(c.Name); len(vals) > 0 {
+				c.EnumValues = vals
+			}
+		}
+	}
+
+	if p.table != "" {
+		var err error
+		schema, err = schema.FilterTable(p.table)
+		if err != nil {
+			return err
+		}
+	}
+
+	g := generator.New(p.cfg, schema)
+	g.SetForce(p.force)
+	return g.Run(os.Stdout)
 }
 
-var defaultBobGen = bobGen{binary: "bobgen-psql", module: "github.com/stephenafamo/bob/gen/bobgen-psql@latest"}
-
-func bobGenFor(driver string) bobGen {
-	if bg, ok := bobGens[driver]; ok {
-		return bg
-	}
-	return defaultBobGen
-}
-
-func bobGenBinary(driver string) string { return bobGenFor(driver).binary }
-func bobGenModule(driver string) string { return bobGenFor(driver).module }
-
-func ensureBob(driver string) error {
-	bin := bobGenBinary(driver)
-	if _, err := exec.LookPath(bin); err == nil {
-		return nil
+// runBobWithKiln runs bob's pipeline with kiln as a plugin.
+// Bob reads the schema, generates models via its own plugins,
+// and kiln generates the API layer via PlugDBInfo.
+func runBobWithKiln(cfg *config.Config, table string, force bool) error {
+	dsn, err := cfg.Database.ResolvedDSN()
+	if err != nil {
+		return fmt.Errorf("resolving database DSN: %w", err)
 	}
 
-	mod := bobGenModule(driver)
-	fmt.Printf(`
-  kiln uses %s to read your database schema.
-  %s is not installed on your system.
-`, bin, bin)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
-	if !confirm(fmt.Sprintf("  Install it now? (go install %s)", mod)) {
-		return fmt.Errorf(
-			"%s is required\n\n"+
-				"  Install it manually:\n"+
-				"  go install %s", bin, mod,
-		)
+	modelsDir := cfg.Bob.ModelsDir
+	if modelsDir == "" {
+		modelsDir = "./models"
 	}
 
-	fmt.Printf("  Installing %s...\n", bin)
-	c := exec.Command("go", "install", mod)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("failed to install %s: %w", bin, err)
-	}
-	fmt.Printf("  ✓ %s installed\n", bin)
-	return nil
-}
+	bobConfig := gen.Config[any]{}
+	bobState := &gen.State[any]{Config: bobConfig}
 
-func runBobGen(driver string) error {
-	bin := bobGenBinary(driver)
-	c := exec.Command(bin)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	// Configure bob plugins to output to the models directory.
+	pluginsCfg := plugins.Config{}
+	pluginsCfg.Models.Destination = modelsDir
+	pluginsCfg.Models.Pkgname = "models"
+	pluginsCfg.DBInfo.Destination = "dbinfo"
+	pluginsCfg.DBInfo.Pkgname = "dbinfo"
+
+	switch cfg.Database.Driver {
+	case "postgres":
+		driverCfg := psqldriver.Config{}
+		driverCfg.Dsn = dsn
+		bobPlugins := plugins.Setup[any, any, psqldriver.IndexExtra](pluginsCfg, gen.PSQLTemplates)
+		kiln := &kilnPlugin[any, any, psqldriver.IndexExtra]{cfg: cfg, table: table, force: force}
+		return gen.Run(ctx, bobState, psqldriver.New(driverCfg), append(bobPlugins, kiln)...)
+
+	case "mysql":
+		driverCfg := mysqldriver.Config{}
+		driverCfg.Dsn = dsn
+		bobPlugins := plugins.Setup[any, any, any](pluginsCfg, gen.MySQLTemplates)
+		kiln := &kilnPlugin[any, any, any]{cfg: cfg, table: table, force: force}
+		return gen.Run(ctx, bobState, mysqldriver.New(driverCfg), append(bobPlugins, kiln)...)
+
+	case "sqlite":
+		driverCfg := sqlitedriver.Config{}
+		driverCfg.Dsn = dsn
+		bobPlugins := plugins.Setup[any, any, any](pluginsCfg, gen.SQLiteTemplates)
+		kiln := &kilnPlugin[any, any, any]{cfg: cfg, table: table, force: force}
+		return gen.Run(ctx, bobState, sqlitedriver.New(driverCfg), append(bobPlugins, kiln)...)
+
+	default:
+		return fmt.Errorf("unsupported database driver: %s", cfg.Database.Driver)
+	}
 }

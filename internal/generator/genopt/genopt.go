@@ -19,12 +19,13 @@ import (
 const checksumPlaceholder = "__CHECKSUM__"
 
 var checksumRe = regexp.MustCompile(`kiln:checksum=([a-f0-9]{64})`)
+var tableTagRe = regexp.MustCompile(`kiln:table=(\S+)`)
 
 // Options holds resolved values shared across all generators.
 type Options struct {
 	ModulePath string
 	ImportPath string
-	Dialect    Dialect // database dialect — drives template choices
+	Dialect    Dialect // database dialect - drives template choices
 	Config     *config.Config
 	Schema     *ir.Schema
 	Force      bool // overwrite user-modified files
@@ -88,7 +89,7 @@ func FileIsUserModified(path string) (bool, error) {
 
 	m := checksumRe.FindSubmatch(data)
 	if m == nil {
-		// No valid checksum marker — treat as unmanaged (allow overwrite).
+		// No valid checksum marker - treat as unmanaged (allow overwrite).
 		return false, nil
 	}
 
@@ -183,4 +184,21 @@ func dialectFor(driver string) Dialect {
 			DriverName:    "pgx",
 		}
 	}
+}
+
+// ExtractTableName reads the kiln:table=<name> tag from a generated file's
+// header comment. Returns empty string if the file has no table tag.
+func ExtractTableName(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	// Only check the first few lines (header comments).
+	lines := strings.SplitN(string(data), "\n", 5)
+	for _, line := range lines {
+		if m := tableTagRe.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
+	}
+	return ""
 }

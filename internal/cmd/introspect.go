@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/fisayoafolayan/kiln/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +16,11 @@ func introspectCmd() *cobra.Command {
 		Use:   "introspect",
 		Short: "Print the parsed schema IR (useful for debugging)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, schema, err := parseSchema()
+			cfg, err := config.Load(cfgFile)
+			if err != nil {
+				return err
+			}
+			schema, err := parseBobModels(cfg)
 			if err != nil {
 				return err
 			}

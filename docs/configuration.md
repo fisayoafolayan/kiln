@@ -55,7 +55,7 @@ overrides:
     readonly_fields:            # excluded from Create/Update requests
       - created_at
       - updated_at
-    disable:                    # disable operations: create|update|delete|list|get
+    disable:                    # disable operations: create|update|delete|list|get|link|unlink
       - delete
     filterable_fields:          # allowlist for filters; empty = all columns
       - email

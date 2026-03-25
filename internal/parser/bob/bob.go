@@ -43,7 +43,7 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 
 	if len(files) == 0 {
 		return nil, fmt.Errorf(
-			"no .bob.go files found in %q — did you run kiln generate after setting up the database?",
+			"no .bob.go files found in %q - did you run kiln generate after setting up the database?",
 			p.ModelsDir,
 		)
 	}
@@ -64,6 +64,7 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 		TableMap: map[string]*ir.Table{},
 	}
 
+	var junctionCandidates []*ir.Table
 	for _, f := range files {
 		if isBoilerplateFile(f) {
 			continue
@@ -76,13 +77,13 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 		if t == nil {
 			continue
 		}
-		// Skip tables with no primary key (e.g. composite PK join tables)
-		if t.PrimaryKey == nil {
-			fmt.Fprintf(os.Stderr, "  [parser] skipping %s: no single-column primary key (composite PKs not supported)\n", t.Name)
-			continue
-		}
 		// Skip explicitly excluded tables
 		if p.isExcluded(t.Name) {
+			continue
+		}
+		// Tables without a single PK may be junction tables for M2M.
+		if !t.HasPK() {
+			junctionCandidates = append(junctionCandidates, t)
 			continue
 		}
 		schema.Tables = append(schema.Tables, t)
@@ -93,10 +94,92 @@ func (p *Parser) Parse() (*ir.Schema, error) {
 		return nil, fmt.Errorf("resolving relationships: %w", err)
 	}
 
+	// Detect M2M relationships from junction table candidates.
+	p.resolveM2M(schema, junctionCandidates)
+
 	// Extract enum values from CHECK constraints in dbinfo files.
 	p.extractMetadataFromDBInfo(schema)
 
 	return schema, nil
+}
+
+// resolveM2M detects many-to-many relationships from junction table candidates.
+// A candidate qualifies if it has exactly 2 FK-like columns (via R struct hints
+// or _id convention) that both point to tables in the schema.
+func (p *Parser) resolveM2M(schema *ir.Schema, candidates []*ir.Table) {
+	// Build model→table lookup for R struct hint resolution.
+	modelToTable := make(map[string]*ir.Table, len(schema.Tables))
+	for _, t := range schema.Tables {
+		modelName := flect.Pascalize(flect.Singularize(t.Name))
+		modelToTable[modelName] = t
+	}
+
+	for _, jt := range candidates {
+		type fkRef struct {
+			colName string
+			target  *ir.Table
+		}
+		var refs []fkRef
+
+		// Strategy 1: Use R struct hints.
+		if len(jt.Meta) > 0 {
+			for _, hint := range jt.Meta {
+				target, ok := modelToTable[hint.TargetModel]
+				if !ok {
+					continue
+				}
+				// Find the FK column: try hint field name as snake_case + "_id".
+				colName := toSnakeCase(hint.FieldName) + "_id"
+				if _, ok := jt.ColumnMap[colName]; ok {
+					refs = append(refs, fkRef{colName: colName, target: target})
+				}
+			}
+		}
+
+		// Strategy 2: Fallback to _id column convention.
+		if len(refs) == 0 {
+			for _, c := range jt.Columns {
+				if !strings.HasSuffix(c.Name, "_id") {
+					continue
+				}
+				stem := strings.TrimSuffix(c.Name, "_id")
+				tableName := flect.Pluralize(stem)
+				if target, ok := schema.TableMap[tableName]; ok {
+					refs = append(refs, fkRef{colName: c.Name, target: target})
+				}
+			}
+		}
+
+		// Must have exactly 2 FK references to qualify as M2M.
+		if len(refs) != 2 {
+			continue
+		}
+
+		// Collect extra columns (non-FK columns).
+		fkCols := map[string]bool{refs[0].colName: true, refs[1].colName: true}
+		var extraCols []*ir.Column
+		for _, c := range jt.Columns {
+			if !fkCols[c.Name] {
+				extraCols = append(extraCols, c)
+			}
+		}
+
+		// Wire up M2M on both sides.
+		refs[0].target.ManyToMany = append(refs[0].target.ManyToMany, &ir.ManyToMany{
+			JunctionTable:     jt.Name,
+			JunctionSourceCol: refs[0].colName,
+			JunctionTargetCol: refs[1].colName,
+			TargetTable:       refs[1].target,
+			ExtraColumns:      extraCols,
+		})
+		refs[1].target.ManyToMany = append(refs[1].target.ManyToMany, &ir.ManyToMany{
+			JunctionTable:     jt.Name,
+			JunctionSourceCol: refs[1].colName,
+			JunctionTargetCol: refs[0].colName,
+			TargetTable:       refs[0].target,
+			ExtraColumns:      extraCols,
+		})
+	}
 }
 
 // parseModelFile parses a single bob-generated .bob.go file and returns
@@ -113,7 +196,7 @@ func (p *Parser) parseModelFile(path string) (*ir.Table, error) {
 		return nil, fmt.Errorf("parsing %q: %w", path, err)
 	}
 
-	// Find the primary model struct — exported, not ending in Slice/Setter/Query/R
+	// Find the primary model struct - exported, not ending in Slice/Setter/Query/R
 	var modelStruct *ast.StructType
 	var modelName string
 
@@ -151,7 +234,7 @@ func (p *Parser) parseModelFile(path string) (*ir.Table, error) {
 
 	for i, field := range modelStruct.Fields.List {
 		if len(field.Names) == 0 {
-			continue // embedded field (e.g. R userR) — skip
+			continue // embedded field (e.g. R userR) - skip
 		}
 
 		name := field.Names[0].Name
@@ -185,8 +268,8 @@ func (p *Parser) parseModelFile(path string) (*ir.Table, error) {
 		table.Columns = append(table.Columns, col)
 		table.ColumnMap[col.Name] = col
 
-		if col.IsPrimaryKey && table.PrimaryKey == nil {
-			table.PrimaryKey = col
+		if col.IsPrimaryKey {
+			table.PrimaryKeys = append(table.PrimaryKeys, col)
 		}
 	}
 
@@ -223,7 +306,7 @@ func (p *Parser) resolveRelationships(schema *ir.Schema) error {
 
 	for _, t := range schema.Tables {
 		if len(t.Meta) > 0 {
-			// Use R struct hints — accurate FK resolution.
+			// Use R struct hints - accurate FK resolution.
 			p.resolveFromHints(t, modelToTable)
 		} else {
 			// Fallback: _id column heuristic.
@@ -246,7 +329,7 @@ func (p *Parser) resolveFromHints(t *ir.Table, modelToTable map[string]*ir.Table
 
 		// Target table: look up by model name.
 		targetTable, ok := modelToTable[hint.TargetModel]
-		if !ok || targetTable.PrimaryKey == nil {
+		if !ok || !targetTable.HasPK() {
 			continue
 		}
 
@@ -254,7 +337,7 @@ func (p *Parser) resolveFromHints(t *ir.Table, modelToTable map[string]*ir.Table
 			SourceTable:  t,
 			SourceColumn: fkCol,
 			TargetTable:  targetTable,
-			TargetColumn: targetTable.PrimaryKey,
+			TargetColumn: targetTable.PrimaryKeys[0],
 		}
 		t.ForeignKeys = append(t.ForeignKeys, fk)
 		targetTable.ReferencedBy = append(targetTable.ReferencedBy, fk)
@@ -269,14 +352,14 @@ func (p *Parser) resolveFromColumns(schema *ir.Schema, t *ir.Table) {
 		}
 		targetName := flect.Pluralize(strings.TrimSuffix(c.Name, "_id"))
 		targetTable, ok := schema.TableMap[targetName]
-		if !ok || targetTable.PrimaryKey == nil {
+		if !ok || !targetTable.HasPK() {
 			continue
 		}
 		fk := &ir.ForeignKey{
 			SourceTable:  t,
 			SourceColumn: c,
 			TargetTable:  targetTable,
-			TargetColumn: targetTable.PrimaryKey,
+			TargetColumn: targetTable.PrimaryKeys[0],
 		}
 		t.ForeignKeys = append(t.ForeignKeys, fk)
 		targetTable.ReferencedBy = append(targetTable.ReferencedBy, fk)
@@ -288,7 +371,7 @@ func (p *Parser) resolveFromColumns(schema *ir.Schema, t *ir.Table) {
 //
 // Bob generates: type commentR struct { Post *Post; User *User }
 // Pointer fields (*Post) are belongs-to; slice fields (PostSlice) are has-many.
-// We only care about belongs-to — has-many is the inverse, derived later.
+// We only care about belongs-to - has-many is the inverse, derived later.
 func parseRelationHints(f *ast.File, modelName string) []ir.RelationHint {
 	// The R struct is named lowercase(modelName) + "R", e.g. "commentR".
 	rStructName := strings.ToLower(modelName[:1]) + modelName[1:] + "R"
@@ -349,7 +432,7 @@ func (p *Parser) resolveGoType(expr ast.Expr) ir.GoType {
 
 	case *ast.IndexExpr:
 		// Generic types: null.Val[string], omit.Val[string], omitnull.Val[string]
-		// These are bob's nullable wrapper types — extract the inner type
+		// These are bob's nullable wrapper types - extract the inner type
 		// and mark it as nullable.
 		if sel, ok := t.X.(*ast.SelectorExpr); ok {
 			pkg := ""
@@ -471,7 +554,7 @@ func (p *Parser) checkBobVersion(path string) error {
 	if compareSemver(ver, minBobVersion) < 0 {
 		return fmt.Errorf(
 			"bob generator version v%d.%d.%d is older than the minimum required v%d.%d.%d\n\n"+
-				"  Upgrade with: go install github.com/stephenafamo/bob/gen/bobgen-psql@latest",
+				"  Regenerate with: kiln generate",
 			ver[0], ver[1], ver[2],
 			minBobVersion[0], minBobVersion[1], minBobVersion[2],
 		)
@@ -578,7 +661,7 @@ func (p *Parser) extractMetadataFromDBInfo(schema *ir.Schema) {
 	dbinfoDir := filepath.Join(filepath.Dir(p.ModelsDir), "dbinfo")
 	files, err := filepath.Glob(filepath.Join(dbinfoDir, "*.bob.go"))
 	if err != nil || len(files) == 0 {
-		return // no dbinfo — nothing to do
+		return // no dbinfo - nothing to do
 	}
 
 	// Extract enum values from CHECK constraints.

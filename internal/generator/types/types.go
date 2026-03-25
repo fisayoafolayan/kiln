@@ -39,7 +39,7 @@ func (g *Generator) Run() ([]string, error) {
 		if !g.opts.Config.ShouldGenerateTable(t.Name) {
 			continue
 		}
-		if t.PrimaryKey == nil {
+		if !t.HasPK() || t.HasCompositePK() {
 			continue
 		}
 		path, err := g.writeTable(t, outDir)
@@ -111,12 +111,26 @@ func resolveImports(t *ir.Table, override config.TableOverride) []string {
 		}
 		add(c.GoType.Package)
 	}
+	// M2M link request types may need the target PK's package.
+	for _, m2m := range t.ManyToMany {
+		if m2m.TargetTable.HasPK() {
+			for _, pk := range m2m.TargetTable.PrimaryKeys {
+				add(pk.GoType.Package)
+			}
+		}
+	}
 	return imports
 }
 
 // funcMap returns the template helper functions.
 func funcMap() template.FuncMap {
 	return template.FuncMap{
+		"firstPK": func(t *ir.Table) *ir.Column {
+			if len(t.PrimaryKeys) > 0 {
+				return t.PrimaryKeys[0]
+			}
+			return nil
+		},
 		// isVisible returns true if a column should appear in response structs.
 		"isVisible": func(c *ir.Column, o config.TableOverride) bool {
 			return !o.IsFieldHidden(c.Name) && !c.IsSoftDeleteColumn()
@@ -173,7 +187,7 @@ type Create{{.Table.GoName}}Request struct {
 
 {{if isOperationEnabled "update" .Override}}
 // Update{{.Table.GoName}}Request is the request body for PATCH /{{.Table.Endpoint}}/:id.
-// All fields are optional — only non-nil fields are updated.
+// All fields are optional - only non-nil fields are updated.
 type Update{{.Table.GoName}}Request struct {
 {{range .Table.Columns}}{{if isWritable . $.Override}}	{{.GoName}} *{{.GoType.Name}} ` + "`" + `json:"{{.JSONName}},omitempty"{{with updateValidationTag .}} validate:"{{.}}"{{end}}` + "`" + `
 {{end}}{{end}}}
@@ -188,4 +202,11 @@ type List{{.Table.GoNamePlural}}Response struct {
 	PageSize int                  ` + "`" + `json:"page_size"` + "`" + `
 }
 {{end}}
+
+{{range .Table.ManyToMany}}{{if isOperationEnabled "link" $.Override}}
+// Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request is the request body for POST /{{$.Table.Endpoint}}/{id}/{{.TargetTable.Endpoint}}.
+type Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request struct {
+	{{(firstPK .TargetTable).GoName}} {{.TargetTable.PKTypeName}} ` + "`" + `json:"{{(firstPK .TargetTable).JSONName}}" validate:"required"` + "`" + `
+}
+{{end}}{{end}}
 `

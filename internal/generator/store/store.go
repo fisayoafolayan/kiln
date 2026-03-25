@@ -15,8 +15,8 @@ import (
 
 // Generator writes:
 //
-//	generated/store/<table>.go         — bob-powered Store impl (always regenerated)
-//	generated/store/mappers/<table>.go — type mapper (write-once, never overwritten)
+//	generated/store/<table>.go         - bob-powered Store impl (always regenerated)
+//	generated/store/mappers/<table>.go - type mapper (write-once, never overwritten)
 type Generator struct {
 	opts       genopt.Options
 	storeTmpl  *template.Template
@@ -56,8 +56,8 @@ func (g *Generator) Run() ([]string, error) {
 		if !g.opts.Config.ShouldGenerateTable(t.Name) {
 			continue
 		}
-		if t.PrimaryKey == nil {
-			continue // skip composite PK tables
+		if !t.HasPK() || t.HasCompositePK() {
+			continue
 		}
 		storePath, err := g.writeStore(t, storeDir)
 		if err != nil {
@@ -131,6 +131,7 @@ type templateData struct {
 	BobPkg         string
 	DialectImport  string
 	NeedsClientID  bool // true for MySQL/SQLite which lack RETURNING
+	Driver         string
 	Table          *ir.Table
 	Override       config.TableOverride
 	WritableCols   []*ir.Column
@@ -170,6 +171,7 @@ func (g *Generator) templateData(t *ir.Table) templateData {
 		BobPkg:         g.opts.Dialect.BobPkg,
 		DialectImport:  g.opts.Dialect.DialectImport,
 		NeedsClientID:  g.opts.Config.Database.Driver != "postgres",
+		Driver:         g.opts.Config.Database.Driver,
 		Table:          t,
 		Override:       override,
 		WritableCols:   writable,
@@ -195,6 +197,12 @@ func funcMap() template.FuncMap {
 			}
 			return false
 		},
+		"firstPK": func(t *ir.Table) *ir.Column {
+			if len(t.PrimaryKeys) > 0 {
+				return t.PrimaryKeys[0]
+			}
+			return nil
+		},
 		"filterNeedsTime": func(cols []*ir.Column) bool {
 			for _, c := range cols {
 				if c.GoType.Name == "time.Time" {
@@ -213,6 +221,39 @@ func funcMap() template.FuncMap {
 				}
 			}
 			return false
+		},
+		"m2mNeedsUUID": func(m2ms []*ir.ManyToMany, table *ir.Table) bool {
+			if len(m2ms) == 0 {
+				return false
+			}
+			for _, m2m := range m2ms {
+				if m2m.TargetTable.PKIsUUID() {
+					return true
+				}
+			}
+			return false
+		},
+		"conflictClause": func(driver string) string {
+			switch driver {
+			case "mysql":
+				return "INSERT IGNORE INTO"
+			case "sqlite":
+				return "INSERT OR IGNORE INTO"
+			default:
+				return "INSERT INTO"
+			}
+		},
+		"conflictSuffix": func(driver string) string {
+			if driver == "postgres" {
+				return " ON CONFLICT DO NOTHING"
+			}
+			return ""
+		},
+		"ph": func(driver string, n int) string {
+			if driver == "postgres" {
+				return fmt.Sprintf("$%d", n)
+			}
+			return "?"
 		},
 	}
 }
@@ -247,11 +288,11 @@ import (
 
 // {{.Table.GoName}}Store handles database operations for {{.Table.Name}}.
 type {{.Table.GoName}}Store struct {
-	db bob.DB
+	db bob.Executor
 }
 
 // New{{.Table.GoName}}Store returns a new {{.Table.GoName}}Store.
-func New{{.Table.GoName}}Store(db bob.DB) *{{.Table.GoName}}Store {
+func New{{.Table.GoName}}Store(db bob.Executor) *{{.Table.GoName}}Store {
 	return &{{.Table.GoName}}Store{db: db}
 }
 
@@ -259,7 +300,7 @@ func New{{.Table.GoName}}Store(db bob.DB) *{{.Table.GoName}}Store {
 // Get retrieves a single {{.Table.GoName}} by primary key.
 func (s *{{.Table.GoName}}Store) Get(ctx context.Context, id {{.Table.PKTypeName}}) (*models.{{.Table.GoName}}, error) {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{(firstPK .Table).GoName}}.EQ({{.BobPkg}}.Arg(id))),
 {{if hasSoftDelete .Table}}		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
 {{end}}	).One(ctx, s.db)
 	if err != nil {
@@ -327,14 +368,14 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, f
 		}
 {{end}}	}
 {{end}}
-	rows, err := dbmodels.{{.Table.GoNamePlural}}.Query(queryMods...).All(ctx, s.db)
-	if err != nil {
-		return nil, 0, fmt.Errorf("{{.Table.Name}}.List: %w", err)
-	}
-	// Count uses only WHERE clauses, not pagination/sort.
+	// Count first so total is always >= returned rows (not fewer due to concurrent deletes).
 	count, err := dbmodels.{{.Table.GoNamePlural}}.Query(whereMods...).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{.Table.Name}}.List count: %w", err)
+	}
+	rows, err := dbmodels.{{.Table.GoNamePlural}}.Query(queryMods...).All(ctx, s.db)
+	if err != nil {
+		return nil, 0, fmt.Errorf("{{.Table.Name}}.List: %w", err)
 	}
 	return mappers.{{.Table.GoNamePlural}}ToTypes(rows), int(count), nil
 }
@@ -345,6 +386,13 @@ func (s *{{.Table.GoName}}Store) List(ctx context.Context, page, pageSize int, f
 func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Context, parentID {{.TargetTable.PKTypeName}}, page, pageSize int) ([]models.{{$.Table.GoName}}, int, error) {
 	if page < 1 { page = 1 }
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+	count, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
+{{if hasSoftDelete $.Table}}		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
+{{end}}	).Count(ctx, s.db)
+	if err != nil {
+		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}} count: %w", err)
+	}
 	rows, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
 {{if hasSoftDelete $.Table}}		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
@@ -354,13 +402,6 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}}: %w", err)
 	}
-	count, err := dbmodels.{{$.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.{{.SourceColumn.GoName}}.EQ({{$.BobPkg}}.Arg(parentID))),
-{{if hasSoftDelete $.Table}}		sm.Where(dbmodels.{{$.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
-{{end}}	).Count(ctx, s.db)
-	if err != nil {
-		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListBy{{.TargetTable.GoName}} count: %w", err)
-	}
 	return mappers.{{$.Table.GoNamePlural}}ToTypes(rows), int(count), nil
 }
 {{end}}
@@ -368,10 +409,10 @@ func (s *{{$.Table.GoName}}Store) ListBy{{.TargetTable.GoName}}(ctx context.Cont
 {{if isOperationEnabled "create" .Override}}
 // Create inserts a new {{.Table.GoName}} record.
 func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
-	{{if .NeedsClientID}}// Generate ID in Go — required for MySQL/SQLite which lack RETURNING support.
+	{{if .NeedsClientID}}// Generate ID in Go - required for MySQL/SQLite which lack RETURNING support.
 	newID := uuid.New().String()
 	setter := &dbmodels.{{.Table.GoName}}Setter{
-		{{.Table.PrimaryKey.GoName}}: omit.From(newID),
+		{{(firstPK .Table).GoName}}: omit.From(newID),
 		{{range .WritableCols}}{{if .Nullable}}{{.GoName}}: omitnull.FromPtr(req.{{.GoName}}),
 		{{else}}{{.GoName}}: omit.From(req.{{.GoName}}),
 		{{end}}{{end}}
@@ -381,7 +422,7 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{
 		return nil, fmt.Errorf("{{.Table.Name}}.Create: %w", err)
 	}
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(newID))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{(firstPK .Table).GoName}}.EQ({{.BobPkg}}.Arg(newID))),
 	).One(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Create fetch: %w", err)
@@ -404,9 +445,10 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{
 // Update modifies an existing {{.Table.GoName}} record.
 func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeName}}, req models.Update{{.Table.GoName}}Request) (*models.{{.Table.GoName}}, error) {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{(firstPK .Table).GoName}}.EQ({{.BobPkg}}.Arg(id))),
 {{if hasSoftDelete .Table}}		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
 {{end}}	).One(ctx, s.db)
+
 	if err != nil {
 		return nil, fmt.Errorf("{{.Table.Name}}.Update find: %w", err)
 	}
@@ -429,7 +471,7 @@ func (s *{{.Table.GoName}}Store) Update(ctx context.Context, id {{.Table.PKTypeN
 {{if hasSoftDelete .Table}}// Delete soft-deletes a {{.Table.GoName}} record by setting deleted_at.
 func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{(firstPK .Table).GoName}}.EQ({{.BobPkg}}.Arg(id))),
 		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.DeletedAt.IsNull()),
 	).One(ctx, s.db)
 	if err != nil {
@@ -446,7 +488,7 @@ func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeN
 {{else}}// Delete removes a {{.Table.GoName}} record by primary key.
 func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeName}}) error {
 	row, err := dbmodels.{{.Table.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{.Table.PrimaryKey.GoName}}.EQ({{.BobPkg}}.Arg(id))),
+		sm.Where(dbmodels.{{.Table.GoNamePlural}}.Columns.{{(firstPK .Table).GoName}}.EQ({{.BobPkg}}.Arg(id))),
 	).One(ctx, s.db)
 	if err != nil {
 		return fmt.Errorf("{{.Table.Name}}.Delete find: %w", err)
@@ -457,10 +499,70 @@ func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeN
 	return nil
 }
 {{end}}{{end}}
+
+{{range .Table.ManyToMany}}
+{{if isOperationEnabled "link" $.Override}}
+// Link{{.TargetTable.GoName}} links a {{.TargetTable.GoName}} to this {{$.Table.GoName}} via {{.JunctionTable}}.
+func (s *{{$.Table.GoName}}Store) Link{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, req models.Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request) error {
+	_, err := bob.Exec(ctx, s.db, bob.RawQuery(
+		` + "`" + `{{conflictClause $.Driver}} {{.JunctionTable}} ({{.JunctionSourceCol}}, {{.JunctionTargetCol}}) VALUES ({{ph $.Driver 1}}, {{ph $.Driver 2}}){{conflictSuffix $.Driver}}` + "`" + `,
+		bob.Named("1", sourceID),
+		bob.Named("2", req.{{(firstPK .TargetTable).GoName}}),
+	))
+	if err != nil {
+		return fmt.Errorf("{{$.Table.Name}}.Link{{.TargetTable.GoName}}: %w", err)
+	}
+	return nil
+}
+{{end}}
+
+{{if isOperationEnabled "unlink" $.Override}}
+// Unlink{{.TargetTable.GoName}} removes a {{.TargetTable.GoName}} link from this {{$.Table.GoName}} via {{.JunctionTable}}.
+func (s *{{$.Table.GoName}}Store) Unlink{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, targetID {{.TargetTable.PKTypeName}}) error {
+	_, err := bob.Exec(ctx, s.db, bob.RawQuery(
+		` + "`" + `DELETE FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}} AND {{.JunctionTargetCol}} = {{ph $.Driver 2}}` + "`" + `,
+		bob.Named("1", sourceID),
+		bob.Named("2", targetID),
+	))
+	if err != nil {
+		return fmt.Errorf("{{$.Table.Name}}.Unlink{{.TargetTable.GoName}}: %w", err)
+	}
+	return nil
+}
+{{end}}
+
+// ListLinked{{.TargetTable.GoNamePlural}} retrieves {{.TargetTable.GoNamePlural}} linked to this {{$.Table.GoName}} via {{.JunctionTable}}.
+func (s *{{$.Table.GoName}}Store) ListLinked{{.TargetTable.GoNamePlural}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, page, pageSize int) ([]models.{{.TargetTable.GoName}}, int, error) {
+	if page < 1 { page = 1 }
+	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+
+	count, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In(bob.RawQuery(
+			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
+			bob.Named("1", sourceID),
+		))),
+	).Count(ctx, s.db)
+	if err != nil {
+		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListLinked{{.TargetTable.GoNamePlural}} count: %w", err)
+	}
+	rows, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
+		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In(bob.RawQuery(
+			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
+			bob.Named("1", sourceID),
+		))),
+		sm.Limit(int64(pageSize)),
+		sm.Offset(int64((page-1)*pageSize)),
+	).All(ctx, s.db)
+	if err != nil {
+		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListLinked{{.TargetTable.GoNamePlural}}: %w", err)
+	}
+	return mappers.{{.TargetTable.GoNamePlural}}ToTypes(rows), int(count), nil
+}
+{{end}}
 `
 
 // ---------------------------------------------------------------------------
-// Mapper template — written once, never overwritten
+// Mapper template - written once, never overwritten
 // ---------------------------------------------------------------------------
 
 const mapperTemplate = `// Generated by kiln on first run. THIS FILE IS YOURS.

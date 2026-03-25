@@ -41,11 +41,15 @@ type Table struct {
 	Columns []*Column
 
 	// Derived fields - populated by the parser after all tables are loaded.
-	PrimaryKey  *Column // nil if composite PK (unsupported in v1)
+	PrimaryKeys []*Column // ordered list of PK columns; len==1 for single PK
 	ForeignKeys []*ForeignKey
 	// ReferencedBy holds FKs from other tables pointing to this table.
 	// Used to generate nested routes e.g. GET /users/{id}/posts
 	ReferencedBy []*ForeignKey
+
+	// ManyToMany holds M2M relationships discovered via junction tables.
+	// Used to generate link/unlink endpoints e.g. POST /posts/{id}/tags
+	ManyToMany []*ManyToMany
 
 	// ColumnMap provides O(1) lookup by column name.
 	ColumnMap map[string]*Column
@@ -84,23 +88,36 @@ func (t *Table) Endpoint() string {
 	return toKebabCase(t.Name)
 }
 
-// PKTypeName returns the Go type name for the primary key (e.g. "string", "int64", "uuid.UUID").
+// HasPK returns true if this table has at least one primary key column.
+func (t *Table) HasPK() bool {
+	return len(t.PrimaryKeys) > 0
+}
+
+// HasCompositePK returns true if this table has a multi-column primary key.
+func (t *Table) HasCompositePK() bool {
+	return len(t.PrimaryKeys) > 1
+}
+
+// PKTypeName returns the Go type name for a single primary key (e.g. "string", "int64", "uuid.UUID").
+// For composite PKs, returns "string" (callers should use PrimaryKeys directly).
 func (t *Table) PKTypeName() string {
-	if t.PrimaryKey == nil {
+	if len(t.PrimaryKeys) != 1 {
 		return "string"
 	}
-	return t.PrimaryKey.GoType.Name
+	return t.PrimaryKeys[0].GoType.Name
 }
 
-// PKIsUUID returns true if the primary key is uuid.UUID.
+// PKIsUUID returns true if the table has a single UUID primary key.
 func (t *Table) PKIsUUID() bool {
-	return t.PKTypeName() == "uuid.UUID"
+	return len(t.PrimaryKeys) == 1 && t.PrimaryKeys[0].GoType.Name == "uuid.UUID"
 }
 
-// PKIsStringLike returns true if the primary key is string or uuid.UUID,
-// meaning no conversion is needed when reading from an HTTP path parameter.
+// PKIsStringLike returns true if the table has a single string or UUID primary key.
 func (t *Table) PKIsStringLike() bool {
-	name := t.PKTypeName()
+	if len(t.PrimaryKeys) != 1 {
+		return false
+	}
+	name := t.PrimaryKeys[0].GoType.Name
 	return name == "string" || name == "uuid.UUID"
 }
 
@@ -165,13 +182,14 @@ var autoManagedTimestamps = map[string]bool{
 // Create and Update request structs.
 //
 // A column is auto-readonly if it is:
-//   - a primary key, or
+//   - a primary key with a database default (e.g. auto-generated UUID), or
 //   - a timestamp with HasDefault set (from schema introspection), or
 //   - a timestamp matching a well-known auto-managed name pattern
 //
+// Composite PK columns without defaults are writable — the caller must supply them.
 // For other cases, use overrides.readonly_fields in kiln.yaml.
 func (c *Column) IsReadOnly() bool {
-	if c.IsPrimaryKey {
+	if c.IsPrimaryKey && c.HasDefault {
 		return true
 	}
 	if c.GoType.Name == "time.Time" {
@@ -253,6 +271,20 @@ func NullableOf(t GoType) GoType {
 	return t
 }
 
+// ManyToMany represents a many-to-many relationship through a junction table.
+type ManyToMany struct {
+	// JunctionTable is the raw junction table name e.g. "post_tags".
+	JunctionTable string
+	// JunctionSourceCol is the junction column pointing to this table e.g. "post_id".
+	JunctionSourceCol string
+	// JunctionTargetCol is the junction column pointing to the related table e.g. "tag_id".
+	JunctionTargetCol string
+	// TargetTable is the table on the other side of the relationship.
+	TargetTable *Table
+	// ExtraColumns are non-FK, non-PK columns on the junction table (e.g. created_at).
+	ExtraColumns []*Column
+}
+
 // ForeignKey represents a relationship between two tables.
 type ForeignKey struct {
 	// The table and column that holds the FK value.
@@ -295,7 +327,7 @@ func (c *Column) ValidationTag() string {
 func (c *Column) UpdateValidationTag() string {
 	var tags []string
 
-	// Never required on update — all fields are optional.
+	// Never required on update - all fields are optional.
 	if len(c.EnumValues) > 0 {
 		tags = append(tags, "oneof="+strings.Join(c.EnumValues, " "))
 	}

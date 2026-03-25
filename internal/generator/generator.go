@@ -34,7 +34,7 @@ func New(cfg *config.Config, schema *ir.Schema) *Generator {
 // Used in tests where there is no go.mod in the working directory.
 func NewWithModulePath(cfg *config.Config, schema *ir.Schema, modulePath string) *Generator {
 	if modulePath == "" {
-		fmt.Fprintln(os.Stderr, "  [generator] WARNING: module path is empty — imports will be broken. Is go.mod present?")
+		fmt.Fprintln(os.Stderr, "  [generator] WARNING: module path is empty - imports will be broken. Is go.mod present?")
 	} else {
 		fmt.Fprintf(os.Stderr, "  [generator] module path: %s\n", modulePath)
 	}
@@ -67,13 +67,18 @@ type newFunc func(genopt.Options) (runnable, error)
 
 // Run executes all enabled generators and writes output files.
 func (g *Generator) Run(w io.Writer) error {
-	// Warn about skipped tables.
+	// Warn about skipped tables and report M2M relationships.
 	for _, t := range g.opts.Schema.Tables {
 		if !g.opts.Config.ShouldGenerateTable(t.Name) {
 			continue
 		}
-		if t.PrimaryKey == nil {
-			fmt.Fprintf(w, "  ⚠ SKIPPED  %s (composite or missing primary key - not supported yet)\n", t.Name)
+		if !t.HasPK() {
+			fmt.Fprintf(w, "  ⚠ SKIPPED  %s (no primary key detected)\n", t.Name)
+		} else if t.HasCompositePK() {
+			fmt.Fprintf(w, "  ⚠ SKIPPED  %s (composite primary key — consider using a single auto-generated PK with a UNIQUE constraint)\n", t.Name)
+		}
+		for _, m2m := range t.ManyToMany {
+			fmt.Fprintf(w, "  [kiln] %s ↔ %s (via %s)\n", t.Name, m2m.TargetTable.Name, m2m.JunctionTable)
 		}
 	}
 

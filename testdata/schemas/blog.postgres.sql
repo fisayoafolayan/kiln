@@ -1,4 +1,4 @@
--- Blog schema — Postgres
+-- Blog schema - Postgres
 -- Uses: native UUID, TIMESTAMPTZ, TEXT, gen_random_uuid()
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -44,7 +44,7 @@ CREATE TABLE tags (
                       name TEXT NOT NULL UNIQUE
 );
 
--- Composite PK — kiln skips this table in v1
+-- Composite PK - kiln skips this table in v1
 CREATE TABLE post_tags (
                            post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
                            tag_id  UUID NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,

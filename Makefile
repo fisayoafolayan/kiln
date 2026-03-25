@@ -34,11 +34,6 @@ MY_CONTAINER := kiln-test-mysql
 SQLITE_FILE  := $(PWD)/testdata/blog.db
 SQLITE_DSN   := $(SQLITE_FILE)
 
-# bob generator binaries (one per database dialect)
-BOBGEN_PG     := bobgen-psql
-BOBGEN_MYSQL  := bobgen-mysql
-BOBGEN_SQLITE := bobgen-sqlite
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Build
 # ─────────────────────────────────────────────────────────────────────────────
@@ -61,24 +56,6 @@ clean: ## Remove build artifacts and test output
 # Bob generators (dev internals)
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: bob/install/psql
-bob/install/psql: ## Install bobgen-psql
-	go install github.com/stephenafamo/bob/gen/bobgen-psql@latest
-	@echo "  ✓ bobgen-psql installed"
-
-.PHONY: bob/install/mysql
-bob/install/mysql: ## Install bobgen-mysql
-	go install github.com/stephenafamo/bob/gen/bobgen-mysql@latest
-	@echo "  ✓ bobgen-mysql installed"
-
-.PHONY: bob/install/sqlite
-bob/install/sqlite: ## Install bobgen-sqlite
-	go install github.com/stephenafamo/bob/gen/bobgen-sqlite@latest
-	@echo "  ✓ bobgen-sqlite installed"
-
-.PHONY: bob/install
-bob/install: bob/install/psql bob/install/mysql bob/install/sqlite ## Install all bob generator binaries (contributors only)
-	@echo "  ✓ All bob generators installed"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Postgres
@@ -206,28 +183,25 @@ db/stop/all: pg/stop my/stop ## Stop all test containers
 # ─────────────────────────────────────────────────────────────────────────────
 
 .PHONY: e2e/postgres
-e2e/postgres: build bob/install/psql pg/start pg/migrate ## Run e2e test against Postgres
+e2e/postgres: build pg/start pg/migrate ## Run e2e test against Postgres
 	@$(MAKE) _e2e \
 		DRIVER=postgres \
 		DSN="$(PG_DSN)" \
-		BOB_GEN=psql \
-		OUT=testdata/e2e/postgres
+OUT=testdata/e2e/postgres
 
 .PHONY: e2e/mysql
-e2e/mysql: build bob/install/mysql my/start my/migrate ## Run e2e test against MySQL
+e2e/mysql: build my/start my/migrate ## Run e2e test against MySQL
 	@$(MAKE) _e2e \
 		DRIVER=mysql \
 		DSN="$(MY_DSN)" \
-		BOB_GEN=mysql \
-		OUT=testdata/e2e/mysql
+OUT=testdata/e2e/mysql
 
 .PHONY: e2e/sqlite
-e2e/sqlite: build bob/install/sqlite sqlite/migrate ## Run e2e test against SQLite
+e2e/sqlite: build sqlite/migrate ## Run e2e test against SQLite
 	@$(MAKE) _e2e \
 		DRIVER=sqlite \
 		DSN="$(SQLITE_DSN)" \
-		BOB_GEN=sqlite \
-		OUT=testdata/e2e/sqlite
+OUT=testdata/e2e/sqlite
 
 .PHONY: e2e/all
 e2e/all: e2e/postgres e2e/mysql e2e/sqlite ## Run e2e tests against all databases
@@ -238,7 +212,7 @@ e2e/all: e2e/postgres e2e/mysql e2e/sqlite ## Run e2e tests against all database
 	@find testdata/e2e -type f | sort
 
 # Internal target - not called directly
-# Accepts: DRIVER, DSN, BOB_GEN, OUT
+# Accepts: DRIVER, DSN, OUT
 .PHONY: _e2e
 _e2e:
 	@echo ""
@@ -274,15 +248,6 @@ _e2e:
 		echo '  exclude:'; \
 		echo '    - post_tags'; \
 	} > $(E2E_DIR)/kiln.yaml
-	@{ \
-		echo '$(BOB_GEN):'; \
-		echo '  dsn: "$(DSN)"'; \
-		echo '  output: "./models"'; \
-		echo '  pkg_name: "models"'; \
-	} > $(E2E_DIR)/bobgen.yaml
-	@echo "  Generated bobgen.yaml:"
-	@cat $(E2E_DIR)/bobgen.yaml
-	@echo ""
 	cd $(E2E_DIR) && go mod init blogapi 2>/dev/null || true
 	cd $(E2E_DIR) && ../../../kiln generate
 	cd $(E2E_DIR) && go get github.com/stephenafamo/bob@v0.42.0
@@ -368,10 +333,6 @@ help: ## Show this help message
 	@echo ""
 	@echo "Build & dev:"
 	@grep -E '^(build|install|clean|test|test/short|test/verbose|test/cover|lint|tidy|fmt|db/stop/all):.*##' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*##"}; {printf "  %-22s %s\n", $$1, $$2}'
-	@echo ""
-	@echo "Dev internals (contributors only):"
-	@grep -E '^(bob/install):.*##' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*##"}; {printf "  %-22s %s\n", $$1, $$2}'
 	@echo ""
 

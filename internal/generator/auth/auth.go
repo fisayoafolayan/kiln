@@ -10,7 +10,7 @@ import (
 	"github.com/fisayoafolayan/kiln/internal/generator/genopt"
 )
 
-// Generator writes generated/auth/middleware.go — a write-once middleware
+// Generator writes generated/auth/middleware.go - a write-once middleware
 type Generator struct {
 	opts genopt.Options
 	tmpl *template.Template
@@ -161,7 +161,7 @@ func validateToken(token string) (*Claims, error) {
 	//   mapClaims := parsed.Claims.(jwt.MapClaims)
 	//   return &Claims{Subject: mapClaims["sub"].(string)}, nil
 	//
-	return nil, fmt.Errorf("jwt validation not implemented — edit generated/auth/middleware.go")
+	return nil, fmt.Errorf("jwt validation not implemented - edit generated/auth/middleware.go")
 }
 
 // ClaimsFrom extracts the validated claims from the request context.
@@ -240,7 +240,7 @@ func validateAPIKey(key string) (*Identity, error) {
 	//   }
 	//   return &Identity{KeyID: identity.ID, Name: identity.Name}, nil
 	//
-	return nil, fmt.Errorf("api key validation not implemented — edit generated/auth/middleware.go")
+	return nil, fmt.Errorf("api key validation not implemented - edit generated/auth/middleware.go")
 }
 
 // IdentityFrom extracts the validated identity from the request context.

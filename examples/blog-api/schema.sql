@@ -1,4 +1,4 @@
--- Blog API schema — Postgres
+-- Blog API schema - Postgres
 -- Features: UUID PKs, enums via CHECK, soft deletes, foreign keys
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

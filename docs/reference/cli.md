@@ -37,6 +37,21 @@ Preview what would be generated without writing any files.
 kiln diff
 ```
 
+### `kiln doctor`
+
+Check project health without modifying any files. Validates config, schema, generated file integrity, and overrides.
+
+```bash
+kiln doctor
+```
+
+Reports:
+- Config validity (driver, output dir)
+- Schema tables and M2M relationships
+- Generated file status (in sync, user-modified, or stale)
+- Override table names that don't match the schema
+- Go module presence
+
 ### `kiln introspect`
 
 Print the parsed schema IR (useful for debugging).

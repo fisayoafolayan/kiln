@@ -76,7 +76,7 @@ Per-table customizations. Keyed by table name.
 | `endpoint` | string | table name | Override URL path segment |
 | `hidden_fields` | []string | `[]` | Excluded from all response types |
 | `readonly_fields` | []string | `[]` | Excluded from Create/Update request types |
-| `disable` | []string | `[]` | Disable operations: `create`, `update`, `delete`, `list`, `get` |
+| `disable` | []string | `[]` | Disable operations: `create`, `update`, `delete`, `list`, `get`, `link`, `unlink` |
 | `filterable_fields` | []string | `[]` | Allowlist for query filters (empty = all columns) |
 | `sortable_fields` | []string | `[]` | Allowlist for sorting (empty = all columns) |
 | `enums` | map[string][]string | `{}` | Allowed values per column name |

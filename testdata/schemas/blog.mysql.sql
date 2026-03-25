@@ -1,6 +1,6 @@
 -- Blog schema -t MySQL 8
 -- Uses: CHAR(36) for UUIDs, DATETIME, VARCHAR, UUID() function
--- MySQL has no native UUID type — stored as CHAR(36)
+-- MySQL has no native UUID type - stored as CHAR(36)
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS post_tags;
@@ -48,7 +48,7 @@ CREATE TABLE tags (
                       name VARCHAR(100) NOT NULL UNIQUE
 );
 
--- Composite PK — kiln skips this table in v1
+-- Composite PK - kiln skips this table in v1
 CREATE TABLE post_tags (
                            post_id CHAR(36) NOT NULL,
                            tag_id  CHAR(36) NOT NULL,

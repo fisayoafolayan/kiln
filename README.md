@@ -9,7 +9,8 @@
 > Compile your database schema into a production-ready Go API.
 >
 > Eliminate schema drift - your API always matches your schema.
-> Zero runtime dependency. No framework lock-in. Delete kiln — your code still compiles.
+> No runtime dependency on kiln. No framework lock-in. Delete kiln - your code still compiles.
+> Generated code depends on [bob](https://github.com/stephenafamo/bob) for type-safe query building.
 
 ## Table of Contents
 
@@ -28,6 +29,7 @@
 - [Schema Evolution](#schema-evolution)
   - [Testing Generated Code](#testing-generated-code)
 - [How It Works](#how-it-works)
+- [Bob Plugin Mode](#bob-plugin-mode)
 - [Why Not sqlc?](#why-not-sqlc)
 - [Configuration](#configuration)
   - [Filtering & Sorting](#filtering--sorting)
@@ -81,6 +83,27 @@ kiln generates everything else.
 
 Think of kiln like a compiler: the schema is your source, `kiln generate` is
 the compile step, and the output is a working API. Change the schema, recompile.
+
+### Scope
+
+kiln is for CRUD-heavy APIs where the database schema drives the domain.
+Internal tools, admin panels, B2B APIs.
+
+It is **not** a framework. It generates plain Go code that depends on
+[bob](https://github.com/stephenafamo/bob) for query building - a compile-time
+bet on a younger library. Bob is good, actively maintained, and the generated
+code is yours to fork if that ever changes. But it's worth knowing the dependency
+is there.
+
+kiln handles additive schema changes perfectly (new columns, new tables).
+Destructive changes (renames, type changes) regenerate correctly, but your
+write-once files (mappers, helpers) may reference old names - kiln won't
+touch those files, so you update them by hand. `kiln doctor` helps catch
+stale generated files but can't check your custom code.
+
+**Reach for something else** when the schema isn't the source of truth -
+workflow engines, event-driven systems, or APIs shaped by business rules
+more than tables.
 
 ---
 
@@ -160,8 +183,12 @@ Run `kiln generate` and you immediately get:
 - `DELETE /api/v1/users/{id}` - delete a user
 - `GET /api/v1/posts` - list posts (soft-deleted posts excluded automatically)
 - `GET /api/v1/users/{id}/posts` - list posts by user ← **generated from the FK**
+- `POST /api/v1/posts/{id}/tags` - link a tag to a post ← **generated from junction table**
+- `DELETE /api/v1/posts/{id}/tags/{tagId}` - unlink a tag from a post
+- `GET /api/v1/posts/{id}/tags` - list tags linked to a post
 
-Relationships in your database automatically become API routes.
+Relationships in your database automatically become API routes. Many-to-many
+relationships via junction tables generate link/unlink endpoints on both sides.
 
 All with an OpenAPI spec, type-safe store, and a running server. No boilerplate
 written by hand.
@@ -195,7 +222,7 @@ Need business logic beyond CRUD? kiln stays out of your way:
 ```go
 // Disable the generated "update" for posts, add your own with business logic:
 func (h *PostHandler) Publish(w http.ResponseWriter, r *http.Request) {
-    // custom validation, state transitions, notifications — your code
+    // custom validation, state transitions, notifications - your code
 }
 ```
 
@@ -286,6 +313,7 @@ integrate with your observability stack.
 | Scenario | Status | Response |
 |----------|--------|----------|
 | Validation failure | 400 | `{"error": "validation failed", "fields": {"name": "is required"}}` |
+| Invalid filter/sort | 400 | `{"error": "invalid value for created_at: expected RFC3339 format"}` |
 | Malformed JSON | 400 | `{"error": "invalid request body"}` |
 | Body too large | 413 | `{"error": "request body too large"}` |
 | Not found | 404 | `{"error": "user not found"}` |
@@ -402,7 +430,7 @@ embedded SHA-256 checksum in a comment on line 2. On regeneration, kiln:
   ✓ docs/openapi.yaml
 ```
 
-Any content change counts as a modification — even a comment or whitespace.
+Any content change counts as a modification - even a comment or whitespace.
 `--force` overrides the check and regenerates everything. There is no undo,
 so use `kiln diff` first to review what would change.
 
@@ -473,12 +501,18 @@ func (m *mockUserStore) Get(ctx context.Context, id uuid.UUID) (*models.User, er
 }
 ```
 
-**Store methods** are single-query functions that work against any `bob.DB`:
+**Store methods** accept `bob.Executor`, which both `bob.DB` and `bob.Tx` satisfy.
+This means you can pass a transaction for test isolation or multi-step operations:
 
 ```go
-db := bob.NewDB(testDB) // real DB or txdb for isolation
+db := bob.NewDB(testDB) // bob.DB satisfies bob.Executor
 store := store.NewUserStore(db)
 user, err := store.Get(ctx, id)
+
+// Or wrap in a transaction:
+tx, _ := testDB.BeginTx(ctx, nil)
+txStore := store.NewUserStore(bob.NewTx(tx))
+// both calls in one transaction
 ```
 
 ---
@@ -500,9 +534,11 @@ Your Database Schema
                                ./cmd/server/main.go   (runnable server - yours to edit)
 ```
 
-kiln uses [bob](https://github.com/stephenafamo/bob) (v0.42.0+) under the hood
-to read your database schema. You don't need to learn bob - kiln installs it,
-configures it, and manages `bobgen.yaml` automatically.
+kiln uses [bob](https://github.com/stephenafamo/bob) (v0.42.0+) for schema
+introspection and as the query builder in generated store code. Bob is a
+runtime dependency of the generated code - your `go.mod` will include it.
+Bob runs in-process during generation - no external binary to install, no
+`bobgen.yaml` to manage. Just `kiln generate`.
 
 **What bob handles:** schema introspection, column type resolution, foreign key
 detection, and Go model generation (`./models/`). If you hit a type that kiln
@@ -515,10 +551,87 @@ accurately resolve FK relationships - even when column names don't match table
 names (e.g. `author_id → users`). This is how nested routes like
 `GET /users/{id}/posts` are discovered automatically.
 
-**Known bob limitations:**
-- Composite primary keys are detected but not supported for code generation (kiln warns and skips)
+**Primary key handling:**
+- Single-column PKs generate standard `/{id}` routes
+- Composite PKs generate multi-param routes (e.g. `/tenant-users/{tenantId}/{userId}`)
+- Junction tables (composite PK + exactly 2 FKs) generate M2M link/unlink endpoints instead of CRUD
+
+**Known limitations:**
 - Postgres array types (`text[]`) require bob v0.42.0+ for correct Go type mapping
 - Custom Postgres types (ltree, ranges) are mapped to `string`
+
+**Advanced: bob plugin mode.** For teams already using bob's code generation
+pipeline, kiln is also available as a
+[bob plugin](https://github.com/fisayoafolayan/kiln/tree/main/plugin). See
+[Bob Plugin Mode](#bob-plugin-mode) below.
+
+---
+
+## Bob Plugin Mode
+
+By default, `kiln generate` handles everything - most projects should use that.
+For teams already using bob's code generation pipeline, kiln is also available
+as a bob plugin. One command generates bob models and kiln's API layer together.
+
+### Install the plugin
+
+```bash
+go get github.com/fisayoafolayan/kiln/plugin@latest
+```
+
+### Create a custom gen/main.go
+
+Instead of running `bobgen-psql` directly, create a small entrypoint that loads
+kiln as a plugin:
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+    "os/signal"
+
+    "github.com/stephenafamo/bob/gen"
+    "github.com/stephenafamo/bob/gen/bobgen-psql/driver"
+    "github.com/stephenafamo/bob/gen/plugins"
+    kilnplugin "github.com/fisayoafolayan/kiln/plugin"
+)
+
+func main() {
+    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+    defer cancel()
+
+    driverConfig := driver.Config{DSN: os.Getenv("DATABASE_URL")}
+    config := gen.Config{}
+
+    bobPlugins := plugins.Setup[any, any, driver.IndexExtra](
+        plugins.Config{}, gen.PSQLTemplates,
+    )
+
+    kiln := kilnplugin.New[any, any, driver.IndexExtra](kilnplugin.Options{
+        ConfigPath: "kiln.yaml",
+    })
+
+    state := &gen.State[any]{Config: config}
+    allPlugins := append(bobPlugins, kiln)
+
+    if err := gen.Run(ctx, state, driver.New(driverConfig), allPlugins...); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+```bash
+DATABASE_URL="postgres://..." go run gen/main.go
+```
+
+kiln implements bob's `DBInfoPlugin` interface - bob calls it after schema
+introspection, and kiln generates the same output as `kiln generate`.
+
+For the full guide including MySQL/SQLite setup and plugin options, see the
+[Bob Plugin Mode documentation](https://kiln.fisayoafolayan.com/guides/bob-plugin/).
 
 ---
 
@@ -537,7 +650,7 @@ a runnable API server.
 | Input | Hand-written SQL queries | Database schema |
 | Output | Go types + query functions | Types + store + handlers + router + OpenAPI |
 | You write | SQL + handlers + router | kiln.yaml |
-| Runtime dependency | None | None |
+| Runtime dependency | None | bob (query builder) |
 
 Use sqlc when you need fine-grained control over every query. Use kiln when
 you want a working API from your schema with minimal code.
@@ -599,7 +712,7 @@ overrides:
     readonly_fields:            # excluded from Create/Update request types
       - created_at
       - updated_at
-    disable:                    # disable specific operations: create|update|delete|list|get
+    disable:                    # disable specific operations: create|update|delete|list|get|link|unlink
       - delete
     filterable_fields:          # allowlist for query filters; empty = all columns
       - email
@@ -717,7 +830,7 @@ func Middleware(next http.Handler) http.Handler {
 
 kiln deliberately does not generate token validation, secret management, or
 JWT parsing. These are application-specific. The middleware gives you the
-hook point — you add your logic. This is consistent with kiln's philosophy:
+hook point - you add your logic. This is consistent with kiln's philosophy:
 generate the structure, you own the decisions.
 
 ---
@@ -731,6 +844,7 @@ kiln generate --table X    Regenerate only one table (useful for large schemas)
 kiln generate --no-bob     Skip schema reading, use existing models
 kiln generate --force      Overwrite files even if they have been manually edited
 kiln diff                  Preview what would be generated (no files written)
+kiln doctor                Check project health: config, schema, generated files
 kiln introspect            Print the parsed schema (text format)
 kiln introspect --format json   Print as JSON (for scripting)
 kiln version               Print kiln version
@@ -747,7 +861,7 @@ error pointing you to `kiln init`.
 
 - **Schema is truth.** Your database already describes your domain. The API should follow it, not the other way around.
 - **Correctness over speed.** Generation is fast, but the real value is that your API never drifts from your schema. Change the schema, regenerate, done.
-- **You own the output.** Zero runtime dependency on kiln. Fork and forget.
+- **You own the output.** No runtime dependency on kiln. The generated code depends on bob for query building - a standard Go library, not a framework. Fork and forget.
 - **Escape hatches everywhere.** Write-once files are yours forever. Checksums protect your edits. Nothing is locked down.
 - **Idiomatic Go.** Output looks like code a senior Go dev wrote by hand.
 - **Brownfield friendly.** Adopt one layer at a time. Start with types, add store later, add handlers when ready.
@@ -760,26 +874,16 @@ error pointing you to `kiln init`.
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
 
-### When to use kiln — and when to outgrow it
+### When to use kiln partially
 
-kiln works best for CRUD-heavy APIs where the database schema drives the domain.
-
-**Use kiln fully** when your API is mostly resource endpoints — list, create,
-read, update, delete. Internal tools, admin panels, B2B APIs.
-
-**Use kiln partially** when some tables are CRUD and others need custom logic.
-Generate models and OpenAPI for everything, handlers for the simple tables,
-and write your own for the complex ones:
+Some tables are CRUD, others need custom logic. Generate models and OpenAPI
+for everything, handlers for the simple tables, write your own for the rest:
 
 ```yaml
 overrides:
   payments:
     disable: [create, update, delete]  # kiln generates list/get, you handle mutations
 ```
-
-**Reach for something else** when the schema isn't the source of truth — workflow
-engines, event-driven systems, or APIs where business rules define the shape
-more than the database does.
 
 ---
 
@@ -839,9 +943,14 @@ When adding a new feature:
 - [x] Authentication middleware (JWT and API key)
 - [x] Checksum-based regeneration safety
 - [x] Locale-independent database error classification
+- [x] Bob plugin support (use kiln as a bob plugin or standalone CLI)
+- [x] In-process schema reading (no external bob binary needed)
+- [x] Many-to-many link/unlink endpoints (via junction tables)
+- [x] Filter and sort validation (400 on invalid values)
+- [x] `kiln doctor` diagnostic command
+- [x] Store accepts `bob.Executor` (enables transactions without generated code changes)
 
 **Next:**
-- [ ] Composite PK link/unlink endpoints (many-to-many)
 - [ ] Cursor-based pagination
 - [ ] Relationship loading (`?include=author`)
 

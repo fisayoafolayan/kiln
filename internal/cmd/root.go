@@ -32,6 +32,7 @@ Supports Postgres, MySQL/MariaDB, and SQLite.`,
 		generateCmd(),
 		diffCmd(),
 		introspectCmd(),
+		doctorCmd(),
 		versionCmd(),
 	)
 

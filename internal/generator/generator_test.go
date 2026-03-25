@@ -38,7 +38,7 @@ func testSchema() *ir.Schema {
 		usersTable.Columns = append(usersTable.Columns, c)
 		usersTable.ColumnMap[c.Name] = c
 		if c.IsPrimaryKey {
-			usersTable.PrimaryKey = c
+			usersTable.PrimaryKeys = append(usersTable.PrimaryKeys, c)
 		}
 	}
 
@@ -62,7 +62,7 @@ func testSchema() *ir.Schema {
 		postsTable.Columns = append(postsTable.Columns, c)
 		postsTable.ColumnMap[c.Name] = c
 		if c.IsPrimaryKey {
-			postsTable.PrimaryKey = c
+			postsTable.PrimaryKeys = append(postsTable.PrimaryKeys, c)
 		}
 	}
 
@@ -71,7 +71,7 @@ func testSchema() *ir.Schema {
 		SourceTable:  postsTable,
 		SourceColumn: postsTable.ColumnMap["user_id"],
 		TargetTable:  usersTable,
-		TargetColumn: usersTable.PrimaryKey,
+		TargetColumn: usersTable.PrimaryKeys[0],
 	}
 	postsTable.ForeignKeys = append(postsTable.ForeignKeys, fk)
 	usersTable.ReferencedBy = append(usersTable.ReferencedBy, fk)
@@ -143,7 +143,7 @@ func TestGeneratorCreatesExpectedFiles(t *testing.T) {
 		"handlers/helpers.go",
 		"router.go",
 		"openapi.yaml",
-		// cmd/server/main.go is skipped in tests — requires a real module path
+		// cmd/server/main.go is skipped in tests - requires a real module path
 	}
 
 	for _, rel := range expected {
@@ -226,7 +226,7 @@ func TestUpdateRequestHasNoRequiredTag(t *testing.T) {
 	updateStruct := src[idx : idx+end]
 
 	if strings.Contains(updateStruct, `validate:"required"`) {
-		t.Error("UpdateUserRequest has validate:\"required\" — PATCH fields should all be optional")
+		t.Error("UpdateUserRequest has validate:\"required\" - PATCH fields should all be optional")
 	}
 }
 
@@ -352,7 +352,7 @@ func TestMapperIsWriteOnce(t *testing.T) {
 	cfg := testConfig(t, outDir)
 	schema := testSchema()
 
-	// First run — should create the mapper
+	// First run - should create the mapper
 	g := generator.New(cfg, schema)
 	if err := g.Run(os.Stdout); err != nil {
 		t.Fatalf("first Run() failed: %v", err)
@@ -370,7 +370,7 @@ func TestMapperIsWriteOnce(t *testing.T) {
 		t.Fatalf("editing mapper: %v", err)
 	}
 
-	// Second run — should NOT overwrite the mapper
+	// Second run - should NOT overwrite the mapper
 	g2 := generator.New(cfg, schema)
 	if err := g2.Run(os.Stdout); err != nil {
 		t.Fatalf("second Run() failed: %v", err)
@@ -382,7 +382,7 @@ func TestMapperIsWriteOnce(t *testing.T) {
 	}
 
 	if string(after) != edited {
-		t.Error("mapper was overwritten on second run — write-once guarantee broken")
+		t.Error("mapper was overwritten on second run - write-once guarantee broken")
 	}
 }
 
@@ -451,7 +451,7 @@ func TestUserEditedFileIsSkipped(t *testing.T) {
 	cfg := testConfig(t, outDir)
 	schema := testSchema()
 
-	// First run — generates files with checksums.
+	// First run - generates files with checksums.
 	g := generator.New(cfg, schema)
 	if err := g.Run(os.Stdout); err != nil {
 		t.Fatalf("first Run() failed: %v", err)
@@ -469,7 +469,7 @@ func TestUserEditedFileIsSkipped(t *testing.T) {
 		t.Fatalf("writing edited file: %v", err)
 	}
 
-	// Second run — should skip the edited file.
+	// Second run - should skip the edited file.
 	g2 := generator.New(cfg, schema)
 	if err := g2.Run(os.Stdout); err != nil {
 		t.Fatalf("second Run() failed: %v", err)
@@ -480,7 +480,7 @@ func TestUserEditedFileIsSkipped(t *testing.T) {
 		t.Fatalf("reading after second run: %v", err)
 	}
 	if string(after) != string(edited) {
-		t.Error("user-edited file was overwritten — checksum guard failed")
+		t.Error("user-edited file was overwritten - checksum guard failed")
 	}
 }
 
@@ -507,7 +507,7 @@ func TestForceOverwritesEditedFile(t *testing.T) {
 		t.Fatalf("writing edited file: %v", err)
 	}
 
-	// Second run with force — should overwrite.
+	// Second run with force - should overwrite.
 	g2 := generator.New(cfg, schema)
 	g2.SetForce(true)
 	if err := g2.Run(os.Stdout); err != nil {
@@ -540,7 +540,7 @@ func TestUnmodifiedFileIsRegenerated(t *testing.T) {
 		t.Fatalf("reading models/users.go: %v", err)
 	}
 
-	// Second run without edits — file should be regenerated (content unchanged).
+	// Second run without edits - file should be regenerated (content unchanged).
 	g2 := generator.New(cfg, schema)
 	if err := g2.Run(os.Stdout); err != nil {
 		t.Fatalf("second Run() failed: %v", err)
@@ -560,7 +560,7 @@ func TestUnmodifiedFileIsRegenerated(t *testing.T) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // TestGeneratedFilesParseAsValidGo verifies every generated .go file
-// is syntactically valid Go — no compiler, no network, no go.sum needed.
+// is syntactically valid Go - no compiler, no network, no go.sum needed.
 func TestSoftDeleteGeneratesCorrectStore(t *testing.T) {
 	outDir := t.TempDir()
 	cfg := testConfig(t, outDir)
