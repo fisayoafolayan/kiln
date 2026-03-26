@@ -9,7 +9,7 @@
 > Schema in. API out.
 
 Turn your database schema into a complete Go HTTP API - models, validation,
-handlers, routing, and OpenAPI. Like sqlc, but for your entire HTTP layer.
+handlers, routing, and OpenAPI.
 
 The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
 builder) for database access. There is no runtime dependency on kiln - you
