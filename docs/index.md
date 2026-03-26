@@ -3,11 +3,6 @@
 Turn your database schema into a complete Go HTTP API - models, validation,
 handlers, routing, and OpenAPI.
 
-The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
-builder) for database access. There is no runtime dependency on kiln - you
-can remove kiln after generation and continue using the code as a normal Go
-project.
-
 ## The Problem
 
 You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.
@@ -57,7 +52,12 @@ You immediately get:
 - `GET /api/v1/users/{id}/posts` - nested route from FK relationship
 - OpenAPI spec at `docs/openapi.yaml`
 
-Relationships in your database automatically become API routes. No runtime dependency on kiln. You own the output.
+Relationships in your database automatically become API routes.
+
+The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
+builder) for database access. There is no runtime dependency on kiln - you
+can remove kiln after generation and continue using the code as a normal Go
+project.
 
 ## Why kiln?
 

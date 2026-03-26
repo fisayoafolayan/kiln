@@ -75,7 +75,8 @@ func main() {
 Then run:
 
 ```bash
-DATABASE_URL="postgres://..." go run gen/main.go
+export DATABASE_URL="postgres://..."
+go run gen/main.go
 ```
 
 This generates bob models and kiln's API layer in a single pass.

@@ -3,7 +3,7 @@
 //
 // Instead of running kiln as a standalone CLI, this plugin integrates
 // directly into bob's generation pipeline. Bob reads the schema, kiln
-// generates the API layer d- one command, one process.
+// generates the API layer with one command, one process.
 //
 // # Usage
 //

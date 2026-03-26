@@ -11,11 +11,6 @@
 Turn your database schema into a complete Go HTTP API - models, validation,
 handlers, routing, and OpenAPI.
 
-The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
-builder) for database access. There is no runtime dependency on kiln - you
-can remove kiln after generation and continue using the code as a normal Go
-project.
-
 ```sql
 CREATE TABLE users (
   id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,8 +44,12 @@ cmd/server/main.go             Runnable server
 
 ```
 DB Schema ──► kiln generate ──► Generated Go API ──► Running server
-                                (plain Go, no runtime dependency on kiln)
 ```
+
+The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
+builder) for database access. There is no runtime dependency on kiln - you
+can remove kiln after generation and continue using the code as a normal Go
+project.
 
 ### Contents
 
@@ -725,7 +724,8 @@ func main() {
 ```
 
 ```bash
-DATABASE_URL="postgres://..." go run gen/main.go
+export DATABASE_URL="postgres://..."
+go run gen/main.go
 ```
 
 kiln implements bob's `DBInfoPlugin` interface - bob calls it after schema
