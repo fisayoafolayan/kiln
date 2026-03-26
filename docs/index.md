@@ -3,6 +3,8 @@
 Turn your database schema into a complete Go HTTP API - models, validation,
 handlers, routing, and OpenAPI.
 
+**[Get started](getting-started.md)** - install kiln and generate your first API.
+
 ## The Problem
 
 You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.

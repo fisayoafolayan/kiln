@@ -8,6 +8,8 @@
 
 > Schema in. API out.
 
+**[Documentation](https://kiln.fisayoafolayan.com)**
+
 Turn your database schema into a complete Go HTTP API - models, validation,
 handlers, routing, and OpenAPI.
 
