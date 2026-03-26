@@ -18,17 +18,26 @@ func doctorCmd() *cobra.Command {
 		Long:  "Validates your kiln setup: config, schema, generated files, and overrides.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var warnings, errors int
+			var pluginMode bool
 
 			// ── Config ──────────────────────────────────────────────
 			fmt.Println("\n  Config")
 			cfg, err := config.Load(cfgFile)
 			if err != nil {
-				fmt.Printf("    ✗ %v\n", err)
-				// Can't continue without config.
-				fmt.Printf("\n  1 error\n\n")
-				return nil
+				// If standalone load fails, try plugin mode (no DSN required).
+				cfg, err = config.LoadForPlugin(cfgFile)
+				if err != nil {
+					fmt.Printf("    ✗ %v\n", err)
+					// Can't continue without config.
+					fmt.Printf("\n  1 error\n\n")
+					return nil
+				}
+				pluginMode = true
 			}
 			fmt.Printf("    ✓ kiln.yaml loaded\n")
+			if pluginMode {
+				fmt.Printf("    ✓ plugin mode (no database DSN required)\n")
+			}
 			fmt.Printf("    ✓ driver: %s\n", cfg.Database.Driver)
 			fmt.Printf("    ✓ output: %s\n", cfg.Output.Dir)
 
