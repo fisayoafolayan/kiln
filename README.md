@@ -6,21 +6,62 @@
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 [![Release](https://img.shields.io/github/v/release/fisayoafolayan/kiln)](https://github.com/fisayoafolayan/kiln/releases)
 
-> Compile your database schema into a production-ready Go API.
->
-> Eliminate schema drift - your API always matches your schema.
-> Delete kiln - your code still compiles. No framework lock-in.
->
-> Generated code uses [bob](https://github.com/stephenafamo/bob) for type-safe query building.
-> Bob is the one runtime dependency of the generated output.
+Turn your database schema into a production-ready Go HTTP API.
 
-## Table of Contents
+> Schema in. API out.
 
-- [The Problem](#the-problem)
-  - [Scope](#scope)
-- [Requirements](#requirements)
+Turn your database schema into a complete Go HTTP API - models, validation,
+handlers, routing, and OpenAPI. Like sqlc, but for your entire HTTP layer.
+
+The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
+builder) for database access. There is no runtime dependency on kiln - you
+can remove kiln after generation and continue using the code as a normal Go
+project.
+
+```sql
+CREATE TABLE users (
+  id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  name  TEXT NOT NULL,
+  role  TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin'))
+);
+```
+
+```bash
+kiln generate
+```
+
+```
+GET    /api/v1/users           List (paginated, filterable, sortable)
+POST   /api/v1/users           Create (validated)
+GET    /api/v1/users/{id}      Get
+PATCH  /api/v1/users/{id}      Update (partial)
+DELETE /api/v1/users/{id}      Delete
+```
+
+```
+generated/
+  models/users.go              Request/response structs with validation
+  store/users.go               Type-safe database operations
+  handlers/users.go            HTTP handlers
+  router.go                    Route registration
+docs/openapi.yaml              OpenAPI 3.0 spec
+cmd/server/main.go             Runnable server
+```
+
+```
+DB Schema ──► kiln generate ──► Generated Go API ──► Running server
+                                (plain Go, no runtime dependency on kiln)
+```
+
+### Contents
+
 - [Quick Start](#quick-start)
 - [Examples](#examples)
+- [Why kiln?](#why-kiln)
+  - [Perfect for](#perfect-for)
+  - [Not ideal for](#not-ideal-for)
+- [Typical Workflow](#typical-workflow)
 - [Sample Schema](#sample-schema)
 - [What Gets Generated](#what-gets-generated)
   - [Custom Logic](#custom-logic)
@@ -28,13 +69,12 @@
 - [Validation](#validation)
   - [Error Responses](#error-responses)
 - [Database Support](#database-support)
-- [Brownfield Adoption](#brownfield-adoption)
+- [Adopt What You Need](#adopt-what-you-need)
   - [Write-Once Files](#write-once-files)
 - [Schema Evolution](#schema-evolution)
   - [Testing Generated Code](#testing-generated-code)
 - [How It Works](#how-it-works)
 - [Bob Plugin Mode](#bob-plugin-mode)
-- [Why Not sqlc?](#why-not-sqlc)
 - [Configuration](#configuration)
   - [Filtering & Sorting](#filtering--sorting)
   - [Enum Validation](#enum-validation)
@@ -44,81 +84,6 @@
 - [Philosophy](#philosophy)
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
-
----
-
-## The Problem
-
-You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.
-It works. Then the schema changes.
-
-A column is renamed. A constraint is added. A table is split.
-Your API doesn't match anymore. Tests pass. CI is green. Production breaks.
-
-Because your API no longer matches your schema. This is **schema drift**.
-
-kiln eliminates it. One command generates your entire API layer from
-the database schema - structs, validation, handlers, router, OpenAPI spec.
-Schema changes? Regenerate. Your API is correct by construction.
-
-*Ideal for CRUD-heavy APIs and backends where the schema evolves frequently.*
-
-### Before kiln
-
-For every table, you write:
-
-- Structs (response, create request, update request)
-- Validation tags
-- HTTP handlers (list, get, create, update, delete)
-- Router wiring
-- OpenAPI spec
-- Error handling, pagination, filtering
-
-Then do it again when the schema changes.
-
-### After kiln
-
-You write:
-
-- The database schema
-- `kiln.yaml` (required config, overrides are optional)
-
-kiln generates everything else.
-
-Think of kiln like a compiler: the schema is your source, `kiln generate` is
-the compile step, and the output is a working API. Change the schema, recompile.
-
-### Scope
-
-kiln is for CRUD-heavy APIs where the database schema drives the domain.
-Internal tools, admin panels, B2B APIs.
-
-It is **not** a framework. It generates plain Go code that depends on
-[bob](https://github.com/stephenafamo/bob) for query building - a compile-time
-bet on a younger library. Bob is good, actively maintained, and the generated
-code is yours to fork if that ever changes. But it's worth knowing the dependency
-is there.
-
-kiln handles additive schema changes perfectly (new columns, new tables).
-Destructive changes (renames, type changes) regenerate correctly, but your
-write-once files (mappers, helpers) may reference old names - kiln won't
-touch those files, so you update them by hand. `kiln doctor` helps catch
-stale generated files but can't check your custom code.
-
-**Reach for something else** when the schema isn't the source of truth -
-workflow engines, event-driven systems, or APIs shaped by business rules
-more than tables.
-
----
-
-## Requirements
-
-- Go 1.26 or later
-- Docker (for running a local database during development)
-- A Postgres, MySQL/MariaDB, or SQLite database
-
-No other tools need to be installed manually - kiln sets up everything it
-needs when you run `kiln generate`.
 
 ---
 
@@ -132,21 +97,15 @@ kiln generate    # generates your full API
 go run cmd/server/main.go
 ```
 
-### Try the example
-
 ```bash
-git clone https://github.com/fisayoafolayan/demo-blog-api.git
-cd demo-blog-api
-cp .env.example .env
-make setup && make run
-
-# In another terminal:
 curl http://localhost:8080/api/v1/users | jq
 ```
 
-See the [Blog API demo](https://github.com/fisayoafolayan/demo-blog-api) for the full walkthrough.
-
----
+```json
+[
+  { "id": "a1b2c3...", "email": "alice@example.com", "name": "Alice", "role": "admin" }
+]
+```
 
 ## Examples
 
@@ -154,6 +113,81 @@ See the [Blog API demo](https://github.com/fisayoafolayan/demo-blog-api) for the
 |---------|-------------|
 | [Blog API](https://github.com/fisayoafolayan/demo-blog-api) | Full CRUD API with filtering, soft deletes, M2M, enums |
 | [Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker) | Bob plugin mode example |
+
+### Try the example
+
+```bash
+git clone https://github.com/fisayoafolayan/demo-blog-api.git
+cd demo-blog-api
+cp .env.example .env
+make setup && make run
+```
+
+---
+
+## Why kiln?
+
+Stop writing by hand:
+
+- CRUD handlers, request/response structs, validation tags
+- Pagination, filtering, sorting boilerplate
+- OpenAPI specs that drift from reality
+- Route wiring for every table and relationship
+
+kiln generates all of it from your schema - and regenerates safely as your
+schema evolves (checksums protect your edits). Plain Go output, no lock-in.
+
+It does not generate business logic, workflows, or cross-table invariants.
+Structural API layer only.
+
+### Perfect for
+
+- Internal tools and admin APIs
+- CRUD-heavy SaaS backends
+- B2B APIs where schema drives the domain
+- Rapid prototyping with real database schemas
+
+### Not ideal for
+
+- Heavy domain logic (payments, approval workflows, state machines)
+- Event-driven architectures (Kafka, queues, async pipelines)
+- APIs where endpoints don't map cleanly to tables
+
+---
+
+## Typical Workflow
+
+```
+1. Update your schema (add column, new table, change constraint)
+2. Migrate the database
+3. Run: kiln generate          ← takes seconds
+4. Restart server
+```
+
+```bash
+# Example: add a column, regenerate
+ALTER TABLE users ADD COLUMN avatar_url TEXT;
+kiln generate
+```
+
+Some files are generated once and never overwritten (mappers, helpers,
+main.go) - these are yours to customize freely.
+
+Additive schema changes (new columns, new tables) just work. Destructive
+changes (renames, type changes) regenerate correctly, but your write-once
+files may reference old names - update them by hand. `kiln doctor` helps
+catch stale generated files.
+
+---
+
+## Requirements
+
+- Go 1.26 or later
+- Docker (for running a local database during development)
+- A Postgres, MySQL/MariaDB, or SQLite database
+
+No other tools need to be installed manually - kiln sets up everything it
+needs when you run `kiln generate`.
 
 ---
 
@@ -385,18 +419,63 @@ database:
 
 ---
 
-## Brownfield Adoption
+## Adopt What You Need
 
-Already have an existing project? kiln is **additive, never destructive**.
-Adopt one layer at a time:
+Every layer is optional. Most teams generate models, store, and OpenAPI -
+handlers are optional. Handlers are the layer closest to business logic, and
+in practice most non-trivial tables outgrow generated handlers quickly as they
+pick up conditional writes, cross-table invariants, or side effects. Generate
+handlers for the genuinely simple CRUD tables, write your own for everything
+else:
 
 ```yaml
 generate:
-  models: true     # just the structs to start
-  store: false     # keep your own DB layer
-  handlers: false  # keep your own handlers
+  models: true     # request/response structs
+  store: true      # type-safe DB operations
+  handlers: false  # write your own handlers
+  router: false    # wire routes yourself
   openapi: true    # free OpenAPI spec, always in sync
 ```
+
+This also works per-table - generate handlers for most tables, disable specific
+operations on the ones that need custom logic:
+
+```yaml
+overrides:
+  payments:
+    disable: [create, update, delete]  # kiln generates list/get, you handle mutations
+```
+
+Your custom handlers call the same generated store:
+
+```go
+// your code - sits alongside generated handlers
+func (h *PaymentHandler) Charge(w http.ResponseWriter, r *http.Request) {
+    var req models.CreatePaymentRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+
+    // your business logic
+    if err := h.billing.Authorize(r.Context(), req.Amount); err != nil {
+        http.Error(w, "payment declined", http.StatusUnprocessableEntity)
+        return
+    }
+
+    // then use kiln's generated store
+    payment, err := h.store.Create(r.Context(), req)
+    if err != nil {
+        http.Error(w, "internal error", http.StatusInternalServerError)
+        return
+    }
+    json.NewEncoder(w).Encode(payment)
+}
+```
+
+This is what a mature kiln project looks like: generated store and models
+everywhere, generated handlers for simple CRUD tables, custom handlers for
+anything with business logic.
 
 ### Write-Once Files
 
@@ -420,6 +499,10 @@ func UserToType(m *dbmodels.User) *models.User {
 ```
 
 Change your schema, regenerate - your mapper is untouched.
+
+For replacing store implementations, bypassing generated queries, or mixing
+manual and generated routes, see
+[Escape Hatches](https://kiln.fisayoafolayan.com/guides/escape-hatches/).
 
 ---
 
@@ -506,10 +589,6 @@ git add -A && git commit -m "add avatar_url to users"
 kiln updates the response struct, create/update requests, store queries,
 handler filters, and OpenAPI spec. One migration, one command, everything
 in sync.
-
-### Why this matters
-
-Without kiln, a schema change means manually updating structs, handlers, validation, filters, OpenAPI spec - hoping nothing falls out of sync. With kiln, the schema is the single source of truth. Change it, regenerate, and the API is correct by construction - not by convention or tests.
 
 ### Testing generated code
 
@@ -657,19 +736,11 @@ introspection, and kiln generates the same output as `kiln generate`.
 For the full guide including MySQL/SQLite setup and plugin options, see the
 [Bob Plugin Mode documentation](https://kiln.fisayoafolayan.com/guides/bob-plugin/).
 For a complete working example, see the
-[Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker).
+[Team Task Tracker](https://github.com/fisayoafolayan/demo-team-task-tracker) demo.
 
 ---
 
 ## Why Not sqlc?
-
-[sqlc](https://github.com/sqlc-dev/sqlc) generates type-safe Go code from
-hand-written SQL queries. It's excellent - but it stops at the database layer.
-
-kiln generates the **full HTTP layer on top**: request/response types with
-validation, handlers, a router, and an OpenAPI spec. You don't write SQL or
-handler code. If sqlc gives you a type-safe database client, kiln gives you
-a runnable API server.
 
 | | sqlc | kiln |
 |---|------|------|
@@ -778,7 +849,17 @@ Supported operators: `eq` (default), `neq`, `gt`, `gte`, `lt`, `lte`.
 Range operators (`gt/gte/lt/lte`) are available for numeric and timestamp columns.
 
 By default, all non-hidden columns are filterable and sortable.
-Use `filterable_fields` / `sortable_fields` in overrides to restrict which columns are exposed.
+**For production APIs, you should lock this down.** Unrestricted filtering can
+expose internal fields and hit unindexed columns. Use `filterable_fields` /
+`sortable_fields` in overrides to explicitly control which columns are exposed:
+
+```yaml
+overrides:
+  users:
+    filterable_fields: [email, role, created_at]   # only these columns
+    sortable_fields: [created_at, name]
+    # disable_filters: true                        # or opt out entirely
+```
 
 ### Enum Validation
 
@@ -885,12 +966,12 @@ error pointing you to `kiln init`.
 
 ## Philosophy
 
-- **Schema is truth.** Your database already describes your domain. The API should follow it, not the other way around.
+- **Schema is the source of truth for structure.** Your database already describes your data shape, constraints, and relationships. Kiln derives everything structural from it - types, validation, routes, OpenAPI. Behavior, workflows, and permissions are yours.
 - **Correctness over speed.** Generation is fast, but the real value is that your API never drifts from your schema. Change the schema, regenerate, done.
 - **You own the output.** No runtime dependency on kiln. The generated code depends on bob for query building - a standard Go library, not a framework. Fork and forget.
 - **Escape hatches everywhere.** Write-once files are yours forever. Checksums protect your edits. Nothing is locked down.
 - **Idiomatic Go.** Output looks like code a senior Go dev wrote by hand.
-- **Brownfield friendly.** Adopt one layer at a time. Start with types, add store later, add handlers when ready.
+- **Adopt what you need.** Every layer is optional. Most teams use models + store + OpenAPI. Handlers are there when they fit, easy to skip when they don't.
 
 ### What kiln is not
 
@@ -899,17 +980,6 @@ error pointing you to `kiln init`.
 - **Not one-shot scaffolding** - regenerate safely as your schema evolves
 
 kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
-
-### When to use kiln partially
-
-Some tables are CRUD, others need custom logic. Generate models and OpenAPI
-for everything, handlers for the simple tables, write your own for the rest:
-
-```yaml
-overrides:
-  payments:
-    disable: [create, update, delete]  # kiln generates list/get, you handle mutations
-```
 
 ---
 

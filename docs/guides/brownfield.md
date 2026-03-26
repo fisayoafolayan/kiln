@@ -1,16 +1,23 @@
-# Brownfield Adoption
+# Adopt What You Need
 
-kiln is designed for incremental adoption. You don't have to generate everything - adopt one layer at a time.
+Every layer is optional. You don't have to generate everything - adopt one
+layer at a time.
+
+Most teams generate models, store, and OpenAPI - handlers are optional.
+Handlers are the layer closest to business logic, and in practice most
+non-trivial tables outgrow generated handlers quickly as they pick up
+conditional writes, cross-table invariants, or side effects. Generate handlers
+for the genuinely simple CRUD tables, write your own for everything else.
 
 ## Toggle Layers
 
 ```yaml
 generate:
-  models: true      # just the structs to start
-  store: false      # keep your own DB layer
-  handlers: false   # keep your own handlers
-  router: false     # keep your own router
-  openapi: true     # free OpenAPI spec
+  models: true      # request/response structs
+  store: true       # type-safe DB operations
+  handlers: false   # write your own handlers
+  router: false     # wire routes yourself
+  openapi: true     # free OpenAPI spec, always in sync
 ```
 
 Start with `models: true` to get validated request/response types. Add layers as you gain confidence.
@@ -41,7 +48,32 @@ generate:
   openapi: true
 ```
 
-You get type-safe store methods. Write handlers that call them.
+You get type-safe store methods. Your custom handlers call the generated store:
+
+```go
+// your code - sits alongside generated handlers
+func (h *PaymentHandler) Charge(w http.ResponseWriter, r *http.Request) {
+    var req models.CreatePaymentRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+
+    // your business logic
+    if err := h.billing.Authorize(r.Context(), req.Amount); err != nil {
+        http.Error(w, "payment declined", http.StatusUnprocessableEntity)
+        return
+    }
+
+    // then use kiln's generated store
+    payment, err := h.store.Create(r.Context(), req)
+    if err != nil {
+        http.Error(w, "internal error", http.StatusInternalServerError)
+        return
+    }
+    json.NewEncoder(w).Encode(payment)
+}
+```
 
 ### "Generate everything for new tables, keep my existing ones"
 

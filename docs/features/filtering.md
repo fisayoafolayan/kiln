@@ -32,7 +32,9 @@ GET /api/v1/users?role=admin&created_at[gte]=2024-01-01T00:00:00Z
 
 ### Restricting Filterable Columns
 
-By default, all non-hidden columns are filterable. Restrict with an allowlist:
+By default, all non-hidden columns are filterable. **For production APIs, you
+should lock this down** - unrestricted filtering can expose internal fields and
+hit unindexed columns. Restrict with an allowlist:
 
 ```yaml
 overrides:

@@ -1,10 +1,14 @@
 # kiln
 
-**Compile your database schema into a production-ready Go API.**
+Turn your database schema into a production-ready Go HTTP API.
 
-Eliminate schema drift - your API always matches your schema. Delete kiln - your code still compiles. No framework lock-in.
+Turn your database schema into a complete Go HTTP API - models, validation,
+handlers, routing, and OpenAPI. Like sqlc, but for your entire HTTP layer.
 
-Generated code uses [bob](https://github.com/stephenafamo/bob) for type-safe query building. Bob is the one runtime dependency of the generated output.
+The generated code uses [bob](https://github.com/stephenafamo/bob) (a query
+builder) for database access. There is no runtime dependency on kiln - you
+can remove kiln after generation and continue using the code as a normal Go
+project.
 
 ## The Problem
 
@@ -12,14 +16,9 @@ You build an API by hand. Structs, validation, handlers, router, OpenAPI spec.
 It works. Then the schema changes. A column is renamed. A constraint is added.
 Your API doesn't match anymore. Tests pass. CI is green. Production breaks.
 
-Because your API no longer matches your schema. This is **schema drift**.
-
-kiln eliminates it. One command generates your entire API layer from
-the database schema. Schema changes? Regenerate. Your API is correct
-by construction - not by convention or tests.
-
-Think of kiln like a compiler: the schema is your source, `kiln generate`
-is the compile step, and the output is a working API. Change the schema, recompile.
+This is **schema drift**. kiln eliminates it. One command regenerates your
+entire API layer from the database schema. Think of kiln as a compiler: the
+schema is the input, and the generated API is the output.
 
 ## Quick Example
 
@@ -64,6 +63,11 @@ Relationships in your database automatically become API routes. No runtime depen
 
 ## Why kiln?
 
+Stop writing by hand: CRUD handlers, request/response structs, validation
+tags, pagination, filtering, sorting, OpenAPI specs, route wiring. kiln
+generates all of it from your schema - and regenerates safely as your schema
+evolves.
+
 | | sqlc | ent | kiln |
 |---|------|-----|------|
 | Input | Hand-written SQL | Go schema DSL | Database schema |
@@ -71,37 +75,43 @@ Relationships in your database automatically become API routes. No runtime depen
 | You write | SQL + handlers + router | Schema + handlers | kiln.yaml |
 | Runtime dependency | None | ent runtime | bob (query builder) |
 
-kiln is the only tool that goes from database schema to **runnable REST API** in one command, where the output is plain Go you can fork and forget.
+It does not generate business logic, workflows, or cross-table invariants.
+Structural API layer only.
 
-### What kiln is not
+### Perfect for
 
-- **Not an ORM** - no runtime query layer
-- **Not a framework** - no runtime control, no hidden magic
-- **Not one-shot scaffolding** - regenerate safely as your schema evolves
+- Internal tools and admin APIs
+- CRUD-heavy SaaS backends
+- B2B APIs where schema drives the domain
 
-kiln is a compiler for APIs. Schema in, Go code out. Delete kiln and the code still compiles.
+### Not ideal for
 
-### When to use kiln - and when to outgrow it
+- Heavy domain logic (payments, approval workflows, state machines)
+- Event-driven architectures (Kafka, queues, async pipelines)
+- APIs where endpoints don't map cleanly to tables
 
-**Use kiln fully** for CRUD-heavy APIs - internal tools, admin panels, B2B APIs.
+### Handlers are optional
 
-**Use kiln partially** when some tables need custom logic. Generate models and
-OpenAPI for everything, handlers for the simple tables, write your own for the rest.
-
-**Reach for something else** when the schema isn't the source of truth - workflow
-engines, event-driven systems, or APIs shaped by business rules more than tables.
+Most teams generate models, store, and OpenAPI - handlers are optional. In
+practice, most non-trivial tables outgrow generated handlers quickly as they
+pick up conditional writes, cross-table invariants, or side effects. Generate
+handlers for the genuinely simple CRUD tables, write your own for everything
+else.
 
 ## Schema Evolution
 
-This is where kiln differs from one-time scaffolding. Your schema changes over time - kiln keeps your API in sync:
+Keep the generated API in sync with database changes by regenerating.
 
 ```
-1. Change your schema
-2. Run: kiln generate
-3. Done. API matches the new schema.
+1. Update your schema (add column, new table, change constraint)
+2. Migrate the database
+3. Run: kiln generate          ← takes seconds
+4. Restart server
 ```
 
-Edited files are protected by checksums. Write-once files are never touched. See [Schema Evolution](guides/schema-changes.md) for the full workflow.
+Edited files are protected by checksums. Some files are generated once and
+never overwritten (mappers, helpers, main.go) - these are yours to customize
+freely. See [Schema Evolution](guides/schema-changes.md) for the full workflow.
 
 ## Next Steps
 
