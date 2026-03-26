@@ -504,10 +504,10 @@ func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeN
 {{if isOperationEnabled "link" $.Override}}
 // Link{{.TargetTable.GoName}} links a {{.TargetTable.GoName}} to this {{$.Table.GoName}} via {{.JunctionTable}}.
 func (s *{{$.Table.GoName}}Store) Link{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, req models.Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request) error {
-	_, err := bob.Exec(ctx, s.db, bob.RawQuery(
+	_, err := bob.Exec(ctx, s.db, {{$.BobPkg}}.RawQuery(
 		` + "`" + `{{conflictClause $.Driver}} {{.JunctionTable}} ({{.JunctionSourceCol}}, {{.JunctionTargetCol}}) VALUES ({{ph $.Driver 1}}, {{ph $.Driver 2}}){{conflictSuffix $.Driver}}` + "`" + `,
-		bob.Named("1", sourceID),
-		bob.Named("2", req.{{(firstPK .TargetTable).GoName}}),
+		sourceID,
+		req.{{(firstPK .TargetTable).GoName}},
 	))
 	if err != nil {
 		return fmt.Errorf("{{$.Table.Name}}.Link{{.TargetTable.GoName}}: %w", err)
@@ -519,10 +519,10 @@ func (s *{{$.Table.GoName}}Store) Link{{.TargetTable.GoName}}(ctx context.Contex
 {{if isOperationEnabled "unlink" $.Override}}
 // Unlink{{.TargetTable.GoName}} removes a {{.TargetTable.GoName}} link from this {{$.Table.GoName}} via {{.JunctionTable}}.
 func (s *{{$.Table.GoName}}Store) Unlink{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, targetID {{.TargetTable.PKTypeName}}) error {
-	_, err := bob.Exec(ctx, s.db, bob.RawQuery(
+	_, err := bob.Exec(ctx, s.db, {{$.BobPkg}}.RawQuery(
 		` + "`" + `DELETE FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}} AND {{.JunctionTargetCol}} = {{ph $.Driver 2}}` + "`" + `,
-		bob.Named("1", sourceID),
-		bob.Named("2", targetID),
+		sourceID,
+		targetID,
 	))
 	if err != nil {
 		return fmt.Errorf("{{$.Table.Name}}.Unlink{{.TargetTable.GoName}}: %w", err)
@@ -537,18 +537,18 @@ func (s *{{$.Table.GoName}}Store) ListLinked{{.TargetTable.GoNamePlural}}(ctx co
 	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
 
 	count, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In(bob.RawQuery(
+		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In({{$.BobPkg}}.RawQuery(
 			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
-			bob.Named("1", sourceID),
+			sourceID,
 		))),
 	).Count(ctx, s.db)
 	if err != nil {
 		return nil, 0, fmt.Errorf("{{$.Table.Name}}.ListLinked{{.TargetTable.GoNamePlural}} count: %w", err)
 	}
 	rows, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
-		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In(bob.RawQuery(
+		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In({{$.BobPkg}}.RawQuery(
 			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
-			bob.Named("1", sourceID),
+			sourceID,
 		))),
 		sm.Limit(int64(pageSize)),
 		sm.Offset(int64((page-1)*pageSize)),
