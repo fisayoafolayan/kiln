@@ -6,8 +6,6 @@
 [![Docs](https://img.shields.io/badge/docs-kiln.fisayoafolayan.com-blue)](https://kiln.fisayoafolayan.com)
 [![Release](https://img.shields.io/github/v/release/fisayoafolayan/kiln)](https://github.com/fisayoafolayan/kiln/releases)
 
-Turn your database schema into a production-ready Go HTTP API.
-
 > Schema in. API out.
 
 Turn your database schema into a complete Go HTTP API - models, validation,

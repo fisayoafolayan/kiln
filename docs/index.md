@@ -1,7 +1,5 @@
 # kiln
 
-Turn your database schema into a production-ready Go HTTP API.
-
 Turn your database schema into a complete Go HTTP API - models, validation,
 handlers, routing, and OpenAPI. Like sqlc, but for your entire HTTP layer.
 
