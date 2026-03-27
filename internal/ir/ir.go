@@ -293,10 +293,6 @@ type ForeignKey struct {
 	// The table and column being referenced.
 	TargetTable  *Table
 	TargetColumn *Column
-
-	// OnDelete / OnUpdate actions e.g. "CASCADE", "SET NULL", "RESTRICT"
-	OnDelete string
-	OnUpdate string
 }
 
 // ValidationTag returns the `validate` struct tag value for a column.
