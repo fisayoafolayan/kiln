@@ -215,9 +215,6 @@ func funcMap() template.FuncMap {
 		"isChi": func(framework string) bool {
 			return framework == "chi"
 		},
-		"isGin": func(framework string) bool {
-			return framework == "gin"
-		},
 		// chiMethod converts "GET" to "Get", "POST" to "Post", etc.
 		"chiMethod": func(method string) string {
 			if len(method) == 0 {
@@ -241,7 +238,6 @@ package {{.OutputPkg}}
 import (
 {{if isStdlib .Framework}}	"net/http"
 {{end}}{{if isChi .Framework}}	"github.com/go-chi/chi/v5"
-{{end}}{{if isGin .Framework}}	"github.com/gin-gonic/gin"
 {{end}}
 	"{{.ImportPath}}/handlers"
 )
@@ -285,15 +281,4 @@ func RegisterRoutes(
 {{end}}}
 {{end}}
 
-{{if isGin .Framework}}
-// RegisterRoutes registers all generated routes onto a gin engine.
-func RegisterRoutes(
-	r *gin.Engine,
-{{range .Tables}}	{{.Handler}} *handlers.{{.Table.GoName}}Handler,
-{{end}}) {
-{{range .Tables}}	// {{.Table.Name}}
-{{range .Routes}}	r.{{.Method}}("{{.Path}}", gin.WrapF({{.Handler}}))
-{{end}}
-{{end}}}
-{{end}}
 `

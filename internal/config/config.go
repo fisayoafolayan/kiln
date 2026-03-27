@@ -57,7 +57,7 @@ type OutputConfig struct {
 
 type APIConfig struct {
 	BasePath  string `yaml:"base_path"` // default: /api/v1
-	Framework string `yaml:"framework"` // stdlib | chi | gin (default: stdlib)
+	Framework string `yaml:"framework"` // stdlib | chi (default: stdlib)
 }
 
 type BobConfig struct {
@@ -75,10 +75,8 @@ func (b BobConfig) IsEnabled() bool {
 }
 
 type TablesConfig struct {
-	Include    []string `yaml:"include"` // if set, only generate these tables
-	Exclude    []string `yaml:"exclude"` // always skip these tables
-	includeSet map[string]bool
-	excludeSet map[string]bool
+	Include []string `yaml:"include"` // if set, only generate these tables
+	Exclude []string `yaml:"exclude"` // always skip these tables
 }
 
 // GenerateConfig controls which layers are generated.
@@ -137,28 +135,29 @@ type TableOverride struct {
 	DisableFilters   bool                `yaml:"disable_filters"`   // opt-out of filtering entirely
 	DisableSorting   bool                `yaml:"disable_sorting"`   // opt-out of sorting entirely
 	Enums            map[string][]string `yaml:"enums"`             // column → allowed values
-	readonlySet      map[string]bool
-	hiddenSet        map[string]bool
-	disableSet       map[string]bool
-	filterableSet    map[string]bool
-	sortableSet      map[string]bool
 }
 
 // IsOperationDisabled returns true if the given operation is disabled
 // for this table. op should be one of: create, update, delete, list, get, link, unlink.
 func (o TableOverride) IsOperationDisabled(op string) bool {
-	return o.disableSet[strings.ToLower(op)]
+	op = strings.ToLower(op)
+	for _, d := range o.Disable {
+		if strings.ToLower(d) == op {
+			return true
+		}
+	}
+	return false
 }
 
 // IsFieldHidden returns true if the field should be excluded from responses.
 func (o TableOverride) IsFieldHidden(field string) bool {
-	return o.hiddenSet[field]
+	return sliceContains(o.HiddenFields, field)
 }
 
 // IsFieldReadonly returns true if the field should be excluded from
 // Create and Update request structs.
 func (o TableOverride) IsFieldReadonly(field string) bool {
-	return o.readonlySet[field]
+	return sliceContains(o.ReadonlyFields, field)
 }
 
 // IsFieldFilterable returns true if the column can be used as a query filter.
@@ -167,8 +166,8 @@ func (o TableOverride) IsFieldFilterable(field string) bool {
 	if o.DisableFilters {
 		return false
 	}
-	if len(o.filterableSet) > 0 {
-		return o.filterableSet[field]
+	if len(o.FilterableFields) > 0 {
+		return sliceContains(o.FilterableFields, field)
 	}
 	return !o.IsFieldHidden(field)
 }
@@ -179,8 +178,8 @@ func (o TableOverride) IsFieldSortable(field string) bool {
 	if o.DisableSorting {
 		return false
 	}
-	if len(o.sortableSet) > 0 {
-		return o.sortableSet[field]
+	if len(o.SortableFields) > 0 {
+		return sliceContains(o.SortableFields, field)
 	}
 	return !o.IsFieldHidden(field)
 }
@@ -209,7 +208,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.applyDefaults()
-	cfg.buildLookups()
 
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -239,7 +237,6 @@ func LoadForPlugin(path string) (*Config, error) {
 
 	cfg.pluginMode = true
 	cfg.applyDefaults()
-	cfg.buildLookups()
 
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -285,30 +282,13 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// buildLookups converts lists to maps for O(1) lookups.
-func (c *Config) buildLookups() {
-	c.Tables.includeSet = toSet(c.Tables.Include)
-	c.Tables.excludeSet = toSet(c.Tables.Exclude)
-
-	for name, o := range c.Overrides {
-		o.hiddenSet = toSet(o.HiddenFields)
-		o.readonlySet = toSet(o.ReadonlyFields)
-		o.disableSet = make(map[string]bool, len(o.Disable))
-		for _, d := range o.Disable {
-			o.disableSet[strings.ToLower(d)] = true
+func sliceContains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
 		}
-		o.filterableSet = toSet(o.FilterableFields)
-		o.sortableSet = toSet(o.SortableFields)
-		c.Overrides[name] = o
 	}
-}
-
-func toSet(ss []string) map[string]bool {
-	m := make(map[string]bool, len(ss))
-	for _, s := range ss {
-		m[s] = true
-	}
-	return m
+	return false
 }
 
 // validate checks for required fields and invalid combinations.
@@ -337,11 +317,10 @@ func (c *Config) validate() error {
 	validFrameworks := map[string]bool{
 		"stdlib": true,
 		"chi":    true,
-		"gin":    true,
 	}
 	if !validFrameworks[c.API.Framework] {
 		errs = append(errs, fmt.Sprintf(
-			"api.framework %q is invalid - must be one of: stdlib, chi, gin",
+			"api.framework %q is invalid - must be one of: stdlib, chi",
 			c.API.Framework,
 		))
 	}
@@ -373,10 +352,10 @@ func (c *Config) validate() error {
 // ShouldGenerateTable returns true if the given table name should be
 // processed, taking into account tables.include and tables.exclude.
 func (c *Config) ShouldGenerateTable(name string) bool {
-	if len(c.Tables.includeSet) > 0 {
-		return c.Tables.includeSet[name]
+	if len(c.Tables.Include) > 0 {
+		return sliceContains(c.Tables.Include, name)
 	}
-	return !c.Tables.excludeSet[name]
+	return !sliceContains(c.Tables.Exclude, name)
 }
 
 // OverrideFor returns the TableOverride for the given table name.
