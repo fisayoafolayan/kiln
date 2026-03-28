@@ -94,7 +94,12 @@ func TestValidationTag(t *testing.T) {
 		{
 			"nullable with enum",
 			Column{Name: "status", GoType: GoTypeString, Nullable: true, EnumValues: []string{"a", "b"}},
-			"oneof=a b",
+			"omitempty,oneof=a b",
+		},
+		{
+			"enum with default",
+			Column{Name: "status", GoType: GoTypeString, HasDefault: true, EnumValues: []string{"draft", "published"}},
+			"omitempty,oneof=draft published",
 		},
 		{
 			"int field required",
@@ -104,7 +109,7 @@ func TestValidationTag(t *testing.T) {
 		{
 			"string with max only (nullable)",
 			Column{Name: "bio", GoType: GoTypeString, Nullable: true, MaxLength: &maxLen},
-			"max=255",
+			"omitempty,max=255",
 		},
 	}
 

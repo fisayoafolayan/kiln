@@ -51,7 +51,7 @@ A link request struct is generated for each side:
 
 ```go
 type LinkTagToPostRequest struct {
-    TagID uuid.UUID `json:"tag_id" validate:"required"`
+    ID uuid.UUID `json:"id" validate:"required"`
 }
 ```
 

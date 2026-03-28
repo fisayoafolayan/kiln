@@ -300,7 +300,8 @@ type ForeignKey struct {
 func (c *Column) ValidationTag() string {
 	var tags []string
 
-	if !c.Nullable && !c.HasDefault && !c.IsPrimaryKey {
+	required := !c.Nullable && !c.HasDefault && !c.IsPrimaryKey
+	if required {
 		tags = append(tags, "required")
 	}
 	if len(c.EnumValues) > 0 {
@@ -313,6 +314,11 @@ func (c *Column) ValidationTag() string {
 	}
 	if len(tags) == 0 {
 		return ""
+	}
+	// When the field is optional (has a default, is nullable, or is a PK),
+	// prepend omitempty so the validator skips zero/empty values.
+	if !required && len(tags) > 0 {
+		tags = append([]string{"omitempty"}, tags...)
 	}
 	return strings.Join(tags, ",")
 }

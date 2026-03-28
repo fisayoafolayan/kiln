@@ -249,12 +249,6 @@ func funcMap() template.FuncMap {
 			}
 			return ""
 		},
-		"ph": func(driver string, n int) string {
-			if driver == "postgres" {
-				return fmt.Sprintf("$%d", n)
-			}
-			return "?"
-		},
 	}
 }
 
@@ -505,7 +499,7 @@ func (s *{{.Table.GoName}}Store) Delete(ctx context.Context, id {{.Table.PKTypeN
 // Link{{.TargetTable.GoName}} links a {{.TargetTable.GoName}} to this {{$.Table.GoName}} via {{.JunctionTable}}.
 func (s *{{$.Table.GoName}}Store) Link{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, req models.Link{{.TargetTable.GoName}}To{{$.Table.GoName}}Request) error {
 	_, err := bob.Exec(ctx, s.db, {{$.BobPkg}}.RawQuery(
-		` + "`" + `{{conflictClause $.Driver}} {{.JunctionTable}} ({{.JunctionSourceCol}}, {{.JunctionTargetCol}}) VALUES ({{ph $.Driver 1}}, {{ph $.Driver 2}}){{conflictSuffix $.Driver}}` + "`" + `,
+		` + "`" + `{{conflictClause $.Driver}} {{.JunctionTable}} ({{.JunctionSourceCol}}, {{.JunctionTargetCol}}) VALUES (?, ?){{conflictSuffix $.Driver}}` + "`" + `,
 		sourceID,
 		req.{{(firstPK .TargetTable).GoName}},
 	))
@@ -520,7 +514,7 @@ func (s *{{$.Table.GoName}}Store) Link{{.TargetTable.GoName}}(ctx context.Contex
 // Unlink{{.TargetTable.GoName}} removes a {{.TargetTable.GoName}} link from this {{$.Table.GoName}} via {{.JunctionTable}}.
 func (s *{{$.Table.GoName}}Store) Unlink{{.TargetTable.GoName}}(ctx context.Context, sourceID {{$.Table.PKTypeName}}, targetID {{.TargetTable.PKTypeName}}) error {
 	_, err := bob.Exec(ctx, s.db, {{$.BobPkg}}.RawQuery(
-		` + "`" + `DELETE FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}} AND {{.JunctionTargetCol}} = {{ph $.Driver 2}}` + "`" + `,
+		` + "`" + `DELETE FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = ? AND {{.JunctionTargetCol}} = ?` + "`" + `,
 		sourceID,
 		targetID,
 	))
@@ -538,7 +532,7 @@ func (s *{{$.Table.GoName}}Store) ListLinked{{.TargetTable.GoNamePlural}}(ctx co
 
 	count, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In({{$.BobPkg}}.RawQuery(
-			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
+			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = ?` + "`" + `,
 			sourceID,
 		))),
 	).Count(ctx, s.db)
@@ -547,7 +541,7 @@ func (s *{{$.Table.GoName}}Store) ListLinked{{.TargetTable.GoNamePlural}}(ctx co
 	}
 	rows, err := dbmodels.{{.TargetTable.GoNamePlural}}.Query(
 		sm.Where(dbmodels.{{.TargetTable.GoNamePlural}}.Columns.{{(firstPK .TargetTable).GoName}}.In({{$.BobPkg}}.RawQuery(
-			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = {{ph $.Driver 1}}` + "`" + `,
+			` + "`" + `SELECT {{.JunctionTargetCol}} FROM {{.JunctionTable}} WHERE {{.JunctionSourceCol}} = ?` + "`" + `,
 			sourceID,
 		))),
 		sm.Limit(int64(pageSize)),
