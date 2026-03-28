@@ -6,6 +6,7 @@ repo_name: fisayoafolayan/kiln
 
 theme:
   name: material
+  custom_dir: docs_theme
   palette:
     - scheme: default
       primary: deep orange
@@ -60,3 +61,4 @@ nav:
     - CLI: reference/cli.md
     - Generated Files: reference/generated-files.md
     - kiln.yaml: reference/config-reference.md
+    - Go Package Docs: https://pkg.go.dev/github.com/fisayoafolayan/kiln
