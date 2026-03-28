@@ -191,7 +191,7 @@ func funcMap() template.FuncMap {
 		},
 		"hasNullableWritable": func(cols []*ir.Column) bool {
 			for _, c := range cols {
-				if c.Nullable {
+				if c.Nullable || c.HasDefault {
 					return true
 				}
 			}
@@ -408,6 +408,7 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{
 	setter := &dbmodels.{{.Table.GoName}}Setter{
 		{{(firstPK .Table).GoName}}: omit.From(newID),
 		{{range .WritableCols}}{{if .Nullable}}{{.GoName}}: omitnull.FromPtr(req.{{.GoName}}),
+		{{else if .HasDefault}}{{.GoName}}: omit.FromPtr(req.{{.GoName}}),
 		{{else}}{{.GoName}}: omit.From(req.{{.GoName}}),
 		{{end}}{{end}}
 	}
@@ -424,6 +425,7 @@ func (s *{{.Table.GoName}}Store) Create(ctx context.Context, req models.Create{{
 	return mappers.{{.Table.GoName}}ToType(row), nil
 	{{else}}setter := &dbmodels.{{.Table.GoName}}Setter{
 		{{range .WritableCols}}{{if .Nullable}}{{.GoName}}: omitnull.FromPtr(req.{{.GoName}}),
+		{{else if .HasDefault}}{{.GoName}}: omit.FromPtr(req.{{.GoName}}),
 		{{else}}{{.GoName}}: omit.From(req.{{.GoName}}),
 		{{end}}{{end}}
 	}

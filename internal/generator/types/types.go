@@ -181,7 +181,7 @@ type {{.Table.GoName}} struct {
 {{if isOperationEnabled "create" .Override}}
 // Create{{.Table.GoName}}Request is the request body for POST /{{.Table.Endpoint}}.
 type Create{{.Table.GoName}}Request struct {
-{{range .Table.Columns}}{{if isCreatable . $.Override}}	{{.GoName}} {{if .Nullable}}*{{end}}{{.GoType.Name}} ` + "`" + `json:"{{.JSONName}}"{{with validationTag .}} validate:"{{.}}"{{end}}` + "`" + `
+{{range .Table.Columns}}{{if isCreatable . $.Override}}	{{.GoName}} {{if or .Nullable .HasDefault}}*{{end}}{{.GoType.Name}} ` + "`" + `json:"{{.JSONName}}{{if or .Nullable .HasDefault}},omitempty{{end}}"{{with validationTag .}} validate:"{{.}}"{{end}}` + "`" + `
 {{end}}{{end}}}
 {{end}}
 
