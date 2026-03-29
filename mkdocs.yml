@@ -57,6 +57,8 @@ nav:
     - Testing: guides/testing.md
     - Brownfield Adoption: guides/brownfield.md
     - Bob Plugin Mode: guides/bob-plugin.md
+  - Tutorials:
+    - Generate a REST API from PostgreSQL: https://fisayoafolayan.com/blog/generate-a-rest-api-from-your-postgresql-schema-in-go
   - Reference:
     - CLI: reference/cli.md
     - Generated Files: reference/generated-files.md

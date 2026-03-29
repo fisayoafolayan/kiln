@@ -2,4 +2,14 @@
 
 {% block extrahead %}
   <script defer src="https://analytics.afolayan.com/script.js" data-website-id="a520754e-7f37-46d3-b8f6-e68e0192428e"></script>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="kiln">
+  <meta property="og:title" content="{{ page.meta.get('title', page.title) }} - kiln">
+  <meta property="og:description" content="{{ config.site_description }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ page.meta.get('title', page.title) }} - kiln">
+  <meta name="twitter:description" content="{{ config.site_description }}">
 {% endblock %}
