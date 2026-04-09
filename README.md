@@ -88,9 +88,21 @@ project.
 
 ## Quick Start
 
-```bash
-go install github.com/fisayoafolayan/kiln/cmd/kiln@latest
+**Install** - pick one:
 
+```bash
+# Homebrew (macOS/Linux)
+brew install fisayoafolayan/kiln
+
+# Binary (no Go required) - see all platforms at Releases
+curl -sSfL https://github.com/fisayoafolayan/kiln/releases/latest/download/kiln_$(uname -s)_$(uname -m).tar.gz | tar xz
+sudo mv kiln /usr/local/bin/
+
+# Or with Go
+go install github.com/fisayoafolayan/kiln/cmd/kiln@latest
+```
+
+```bash
 kiln init        # interactive setup, done in seconds
 kiln generate    # generates your full API
 go run cmd/server/main.go

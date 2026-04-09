@@ -11,6 +11,14 @@ From database schema to running API in under 5 minutes.
 ## Install
 
 ```bash
+# Homebrew (macOS/Linux)
+brew install fisayoafolayan/kiln
+
+# Or download a binary from GitHub Releases
+curl -sSfL https://github.com/fisayoafolayan/kiln/releases/latest/download/kiln_$(uname -s)_$(uname -m).tar.gz | tar xz
+sudo mv kiln /usr/local/bin/
+
+# Or with Go
 go install github.com/fisayoafolayan/kiln/cmd/kiln@latest
 ```
 

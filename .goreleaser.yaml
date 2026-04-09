@@ -1,0 +1,46 @@
+version: 2
+
+builds:
+  - main: ./cmd/kiln
+    binary: kiln
+    ldflags:
+      - -s -w
+      - -X github.com/fisayoafolayan/kiln/internal/cmd.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "kiln_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - repository:
+      owner: fisayoafolayan
+      name: homebrew-kiln
+      token: "{{ .Env.BREW_TOKEN }}"
+    homepage: https://github.com/fisayoafolayan/kiln
+    description: "Schema-first API compiler for Go"
+    license: MIT
+    install: |
+      bin.install "kiln"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
