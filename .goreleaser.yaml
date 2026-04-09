@@ -17,16 +17,18 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "kiln_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
 checksum:
   name_template: "checksums.txt"
 
-brews:
+homebrew_casks:
   - repository:
       owner: fisayoafolayan
       name: homebrew-kiln
