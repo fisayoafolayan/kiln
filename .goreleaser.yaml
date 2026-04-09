@@ -29,15 +29,16 @@ checksum:
   name_template: "checksums.txt"
 
 homebrew_casks:
-  - repository:
+  - name: kiln
+    binaries:
+      - kiln
+    repository:
       owner: fisayoafolayan
       name: homebrew-kiln
       token: "{{ .Env.BREW_TOKEN }}"
     homepage: https://github.com/fisayoafolayan/kiln
     description: "Schema-first API compiler for Go"
     license: MIT
-    install: |
-      bin.install "kiln"
 
 changelog:
   sort: asc
