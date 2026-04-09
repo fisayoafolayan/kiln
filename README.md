@@ -92,10 +92,10 @@ project.
 
 ```bash
 # Homebrew (macOS/Linux)
-brew install fisayoafolayan/kiln
+brew install fisayoafolayan/kiln/kiln
 
-# Binary (no Go required) - see all platforms at Releases
-curl -sSfL https://github.com/fisayoafolayan/kiln/releases/latest/download/kiln_$(uname -s)_$(uname -m).tar.gz | tar xz
+# Or download a binary (no Go required)
+curl -sSfL "https://github.com/fisayoafolayan/kiln/releases/latest/download/kiln_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" | tar xz
 sudo mv kiln /usr/local/bin/
 
 # Or with Go
